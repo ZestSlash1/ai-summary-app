@@ -1,6 +1,7 @@
 "use client";
 
 import type { Conversation } from "@/lib/types";
+import { GithubAuthButton } from "@/components/GithubAuthButton";
 
 export function Sidebar({
   conversations,
@@ -54,6 +55,8 @@ export function Sidebar({
           </button>
         ))}
       </div>
+
+      <GithubAuthButton />
     </aside>
   );
 }

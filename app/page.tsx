@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { UIMessage } from "ai";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatPanel } from "@/components/ChatPanel";
-import type { Conversation } from "@/lib/types";
+import type { Conversation, GithubRepoLink } from "@/lib/types";
 import { DEFAULT_MODEL } from "@/lib/types";
 import {
   createConversation,
@@ -69,6 +69,15 @@ export default function Home() {
     );
   }
 
+  function handleRepoChange(repo: GithubRepoLink | undefined) {
+    if (!conversations || !activeId) return;
+    persist(
+      conversations.map((c) =>
+        c.id === activeId ? { ...c, githubRepo: repo } : c
+      )
+    );
+  }
+
   function handleMessagesUpdate(messages: UIMessage[]) {
     if (!conversations || !activeId) return;
     const textPart = messages
@@ -112,6 +121,8 @@ export default function Home() {
         model={active.model || DEFAULT_MODEL}
         onModelChange={handleModelChange}
         onMessagesUpdate={handleMessagesUpdate}
+        githubRepo={active.githubRepo}
+        onRepoChange={handleRepoChange}
       />
     </div>
   );

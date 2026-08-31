@@ -6,7 +6,14 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ModelSwitcher } from "./ModelSwitcher";
+import { RepoConnect } from "./RepoConnect";
+import { McpConnectors } from "./McpConnectors";
+import { SkillPrompt } from "./SkillPrompt";
+import { MessageText } from "./CodeBlock";
 import { Mascot } from "./Mascot";
+import { extractPushableFiles } from "@/lib/codeBlocks";
+import type { McpConnector } from "@/lib/mcp";
+import type { GithubRepoLink } from "@/lib/types";
 
 gsap.registerPlugin(useGSAP);
 
@@ -22,37 +29,97 @@ export function ChatPanel({
   model,
   onModelChange,
   onMessagesUpdate,
+  githubRepo,
+  onRepoChange,
 }: {
   conversationId: string;
   initialMessages: UIMessage[];
   model: string;
   onModelChange: (model: string) => void;
   onMessagesUpdate: (messages: UIMessage[]) => void;
+  githubRepo?: GithubRepoLink;
+  onRepoChange: (repo: GithubRepoLink | undefined) => void;
 }) {
   const modelRef = useRef(model);
   useEffect(() => {
     modelRef.current = model;
   }, [model]);
 
-  // Reads modelRef at request time (not render time), so the transport
-  // always sends the latest selected model without needing to be recreated.
+  const [enabledConnectors, setEnabledConnectors] = useState<McpConnector[]>([]);
+  const connectorsRef = useRef(enabledConnectors);
+  useEffect(() => {
+    connectorsRef.current = enabledConnectors;
+  }, [enabledConnectors]);
+
+  const repoRef = useRef(githubRepo);
+  useEffect(() => {
+    repoRef.current = githubRepo;
+  }, [githubRepo]);
+
+  const [pushStatus, setPushStatus] = useState<
+    { state: "pushed" | "error"; label: string } | undefined
+  >();
+
+  // Reads modelRef/connectorsRef at request time (not render time), so the
+  // transport always sends the latest state without needing to be recreated.
   /* eslint-disable react-hooks/refs */
   const [transport] = useState(
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        body: () => ({ model: modelRef.current }),
+        body: () => ({
+          model: modelRef.current,
+          mcpConnectors: connectorsRef.current
+            .filter((c) => c.enabled)
+            .map((c) => ({ url: c.url, authHeader: c.authHeader })),
+        }),
       })
   );
   /* eslint-enable react-hooks/refs */
+
+  async function pushMessageCode(message: UIMessage) {
+    const repo = repoRef.current;
+    if (!repo) return;
+    const texts = message.parts
+      .filter((p) => p.type === "text")
+      .map((p) => (p as { text: string }).text);
+    const files = extractPushableFiles(texts);
+    if (files.length === 0) return;
+
+    try {
+      const res = await fetch("/api/github/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          owner: repo.owner,
+          repo: repo.name,
+          branch: repo.branch,
+          files,
+          message: `Nimbus: update ${files.length} file${files.length === 1 ? "" : "s"}`,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      setPushStatus({
+        state: "pushed",
+        label: `Pushed ${files.length} file${files.length === 1 ? "" : "s"} to ${repo.owner}/${repo.name}`,
+      });
+    } catch {
+      setPushStatus({ state: "error", label: "Push failed" });
+    }
+  }
 
   const { messages, sendMessage, status, error } = useChat({
     id: conversationId,
     messages: initialMessages,
     transport,
+    onFinish: ({ message }) => {
+      pushMessageCode(message);
+    },
   });
 
   const [input, setInput] = useState("");
+  const [mcpOpen, setMcpOpen] = useState(false);
+  const [repoPromptOpen, setRepoPromptOpen] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -66,6 +133,12 @@ export function ChatPanel({
     (!lastMessage ||
       lastMessage.role !== "assistant" ||
       !lastMessage.parts.some((p) => p.type === "text" && p.text.trim()));
+
+  const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
+  const lastUserText =
+    lastUserMessage?.parts.find((p) => p.type === "text" && "text" in p) as
+      | { text: string }
+      | undefined;
 
   useEffect(() => {
     onMessagesUpdate(messages);
@@ -148,11 +221,7 @@ export function ChatPanel({
               >
                 {message.parts.map((part, i) => {
                   if (part.type === "text") {
-                    return (
-                      <span key={i} className="whitespace-pre-wrap">
-                        {part.text}
-                      </span>
-                    );
+                    return <MessageText key={i} text={part.text} />;
                   }
                   if (part.type.startsWith("tool-")) {
                     return (
@@ -182,6 +251,16 @@ export function ChatPanel({
           </div>
         )}
 
+        {lastUserText && !isStreaming && (
+          <SkillPrompt
+            latestUserText={lastUserText.text}
+            githubRepo={githubRepo}
+            hasEnabledMcp={enabledConnectors.some((c) => c.enabled)}
+            onConnectRepo={() => setRepoPromptOpen(true)}
+            onOpenMcp={() => setMcpOpen(true)}
+          />
+        )}
+
         {error && (
           <div
             role="alert"
@@ -196,6 +275,30 @@ export function ChatPanel({
           className="flex items-center gap-2 rounded-[var(--nimbus-radius-card)] border border-nimbus-border bg-nimbus-surface p-2 shadow-[var(--nimbus-shadow)]"
         >
           <ModelSwitcher value={model} onChange={onModelChange} />
+          <RepoConnect
+            value={githubRepo}
+            onChange={onRepoChange}
+            pushStatus={pushStatus}
+            forceOpen={repoPromptOpen}
+            onForceOpenHandled={() => setRepoPromptOpen(false)}
+          />
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMcpOpen((v) => !v)}
+              className="flex items-center gap-1 rounded-[var(--nimbus-radius-pill)] border border-nimbus-border bg-nimbus-surface px-3 py-2 text-xs font-medium text-nimbus-text-muted shadow-[var(--nimbus-shadow)] transition-colors hover:border-nimbus-accent/40"
+            >
+              MCP
+              {enabledConnectors.filter((c) => c.enabled).length > 0 && (
+                <span className="h-1.5 w-1.5 rounded-full bg-nimbus-free" />
+              )}
+            </button>
+            <McpConnectors
+              open={mcpOpen}
+              onOpenChange={setMcpOpen}
+              onConnectorsChange={setEnabledConnectors}
+            />
+          </div>
           <input
             className="flex-1 bg-transparent px-2 py-2 text-sm text-nimbus-text placeholder:text-nimbus-text-muted focus:outline-none disabled:opacity-50"
             value={input}
