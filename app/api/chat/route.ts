@@ -24,10 +24,11 @@ const tools = {
 };
 
 export async function POST(request: Request) {
-  const { messages }: { messages: UIMessage[] } = await request.json();
+  const { messages, model }: { messages: UIMessage[]; model?: string } =
+    await request.json();
 
   const result = streamText({
-    model: 'minimax/minimax-m3',
+    model: model || 'minimax/minimax-m3',
     system:
       'You are a helpful assistant. Use tools when they would give a more accurate or useful answer than reasoning alone. Only mention capabilities you actually have.',
     messages: await convertToModelMessages(messages),

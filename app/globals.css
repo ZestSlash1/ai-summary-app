@@ -1,39 +1,54 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #eaeaea;
-  --muted: #7a7a7a;
-  --border: rgba(234, 234, 234, 0.14);
-  --border-strong: rgba(234, 234, 234, 0.28);
-  --accent: #ff3b30;
-  --accent-dim: rgba(255, 59, 48, 0.14);
-  --ready: #4af626;
+  --nimbus-bg: #f7f6f2;
+  --nimbus-surface: #ffffff;
+  --nimbus-border: #ecEAE4;
+  --nimbus-text: #1a1a18;
+  --nimbus-text-muted: #6b6a64;
+  --nimbus-accent: #3b82f6;
+  --nimbus-accent-soft: #eaf2fe;
+  --nimbus-free: #10b981;
+  --nimbus-free-soft: #e8f9f1;
 
-  /* 4px base spacing scale */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-12: 48px;
+  --nimbus-radius-card: 24px;
+  --nimbus-radius-pill: 999px;
+  --nimbus-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+  --nimbus-shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.05), 0 16px 40px rgba(0, 0, 0, 0.09);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
-  --color-border: var(--border);
-  --color-border-strong: var(--border-strong);
-  --color-accent: var(--accent);
-  --color-accent-dim: var(--accent-dim);
-  --color-ready: var(--ready);
-  --font-mono: var(--font-mono-plex);
+  --color-nimbus-bg: var(--nimbus-bg);
+  --color-nimbus-surface: var(--nimbus-surface);
+  --color-nimbus-border: var(--nimbus-border);
+  --color-nimbus-text: var(--nimbus-text);
+  --color-nimbus-text-muted: var(--nimbus-text-muted);
+  --color-nimbus-accent: var(--nimbus-accent);
+  --color-nimbus-accent-soft: var(--nimbus-accent-soft);
+  --color-nimbus-free: var(--nimbus-free);
+  --color-nimbus-free-soft: var(--nimbus-free-soft);
+  --font-sans: var(--font-geist);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-mono-plex), ui-monospace, monospace;
+  background: var(--nimbus-bg);
+  color: var(--nimbus-text);
+  font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+}
+
+@keyframes nimbus-pulse {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.nimbus-dot {
+  animation: nimbus-pulse 1.1s ease-in-out infinite;
 }
