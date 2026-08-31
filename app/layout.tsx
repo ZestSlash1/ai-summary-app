@@ -9,8 +9,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SUMMARIZE",
-  description: "Paste text, get a concise summary.",
+  title: "AGENT",
+  description: "A conversational agent with multi-step tool use.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
