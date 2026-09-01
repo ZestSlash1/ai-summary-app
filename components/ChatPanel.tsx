@@ -157,15 +157,31 @@ export function ChatPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages]);
 
+  // Guards against a double-send: `isStreaming` only flips true once React
+  // re-renders after sendMessage's first tick, leaving a brief window where
+  // a fast double-click/double-Enter can fire the request twice. This ref
+  // closes that window synchronously; the effect below releases it once the
+  // real status catches up.
+  const sendingRef = useRef(false);
+  useEffect(() => {
+    if (isStreaming) sendingRef.current = false;
+  }, [isStreaming]);
+
+  function trySend(text: string) {
+    if (!text.trim() || isStreaming || sendingRef.current) return;
+    sendingRef.current = true;
+    sendMessage({ text });
+  }
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!input.trim()) return;
-    sendMessage({ text: input });
+    trySend(input);
     setInput("");
   }
 
   function handleSuggestion(text: string) {
-    sendMessage({ text });
+    trySend(text);
   }
 
   useGSAP(
@@ -345,7 +361,7 @@ export function ChatPanel({
               />
             </div>
             <input
-              className="flex-1 bg-transparent px-2 py-2 text-sm text-nimbus-text placeholder:text-nimbus-text-muted focus:outline-none disabled:opacity-50"
+              className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm text-nimbus-text placeholder:text-nimbus-text-muted focus:outline-none disabled:opacity-50"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask something…"
