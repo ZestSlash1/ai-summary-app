@@ -108,6 +108,38 @@ body::before {
   flex: 1;
 }
 
+/* Custom scrollbar: thin, matches the surface palette instead of the OS
+   default. Firefox via scrollbar-color/-width, WebKit via pseudo-elements. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--nimbus-border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--nimbus-border);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--nimbus-text-muted);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Double-bezel shell: an outer machined tray around a card's inner core,
    so surfaces read as physical objects instead of flat rectangles. */
 .nimbus-shell {
