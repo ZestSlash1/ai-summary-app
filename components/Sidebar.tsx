@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import type { Conversation } from "@/lib/types";
-import { GithubAuthButton } from "@/components/GithubAuthButton";
+import { AccountMenu } from "@/components/AccountMenu";
+import { ThemeToggleIcon } from "@/components/ThemeToggleIcon";
 
 export function Sidebar({
   conversations,
@@ -94,9 +95,10 @@ export function Sidebar({
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="flex-1">
-            <GithubAuthButton />
+          <div className="min-w-0 flex-1">
+            <AccountMenu conversations={conversations} />
           </div>
+          <ThemeToggleIcon />
           <Link
             href="/settings"
             aria-label="Settings"

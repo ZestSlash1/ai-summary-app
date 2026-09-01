@@ -12,6 +12,7 @@ import { SkillPrompt } from "./SkillPrompt";
 import { MessageText } from "./CodeBlock";
 import { MessageActions } from "./MessageActions";
 import { ThinkingIndicator } from "./ThinkingIndicator";
+import { ThinkingFieldBackground } from "./ThinkingFieldBackground";
 import { Mascot } from "./Mascot";
 import { extractPushableFiles } from "@/lib/codeBlocks";
 import type { McpConnector } from "@/lib/mcp";
@@ -250,9 +251,10 @@ export function ChatPanel({
   return (
     <div
       ref={containerRef}
-      className="flex flex-1 flex-col items-center overflow-hidden px-4 pb-4 pt-20 sm:px-6 sm:pb-8 sm:pt-12 md:pt-8"
+      className="relative flex flex-1 flex-col items-center overflow-hidden px-4 pb-4 pt-20 sm:px-6 sm:pb-8 sm:pt-12 md:pt-8"
     >
-      <div className="flex w-full max-w-2xl flex-1 flex-col gap-6 overflow-hidden">
+      <ThinkingFieldBackground active={isThinking} />
+      <div className="relative z-10 flex w-full max-w-2xl flex-1 flex-col gap-6 overflow-hidden">
         {messages.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-6 text-center">
             <Mascot className="h-24 w-24" />
