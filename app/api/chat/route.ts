@@ -186,5 +186,12 @@ export async function POST(request: Request) {
     },
   });
 
-  return result.toUIMessageStreamResponse();
+  return result.toUIMessageStreamResponse({
+    // The AI SDK masks the real error behind a generic "An error occurred."
+    // by default so internal failures aren't leaked to end users. This app
+    // has no untrusted end users beyond the operator, and a masked message
+    // makes provider failures (bad model id, upstream 5xx, etc.) impossible
+    // to diagnose from the UI.
+    onError: (error) => (error instanceof Error ? error.message : String(error)),
+  });
 }
