@@ -22,16 +22,18 @@ export function Sidebar({
       <button
         type="button"
         onClick={onNewChat}
-        className="flex items-center justify-center gap-2 rounded-2xl border border-nimbus-border bg-nimbus-surface px-4 py-2.5 text-sm font-medium text-nimbus-text shadow-[var(--nimbus-shadow)] transition-colors hover:border-nimbus-accent/40"
+        className="group flex items-center gap-2 rounded-2xl border border-nimbus-border bg-nimbus-surface py-2 pl-2 pr-4 text-sm font-medium text-nimbus-text shadow-[var(--nimbus-shadow)] transition-[transform,border-color] duration-300 ease-[var(--nimbus-ease)] hover:-translate-y-0.5 hover:border-nimbus-accent/40 active:translate-y-0 active:scale-[0.98]"
       >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <path
-            d="M7 1v12M1 7h12"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          />
-        </svg>
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-nimbus-accent-soft text-nimbus-accent transition-transform duration-300 ease-[var(--nimbus-ease)] group-hover:rotate-90">
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+            <path
+              d="M7 1v12M1 7h12"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            />
+          </svg>
+        </span>
         New chat
       </button>
 
@@ -46,7 +48,7 @@ export function Sidebar({
             key={c.id}
             type="button"
             onClick={() => onSelect(c.id)}
-            className={`truncate rounded-xl border-l-2 px-3 py-2 text-left text-sm transition-colors ${
+            className={`truncate rounded-xl border-l-2 px-3 py-2 text-left text-sm transition-[color,background-color,border-color] duration-300 ease-[var(--nimbus-ease)] ${
               c.id === activeId
                 ? "border-nimbus-accent bg-nimbus-surface font-medium text-nimbus-text shadow-[var(--nimbus-shadow)]"
                 : "border-transparent text-nimbus-text-muted hover:bg-nimbus-surface/60"

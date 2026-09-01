@@ -1,23 +1,48 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import { ModelSwitcher } from "@/components/ModelSwitcher";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { McpConnectorsList } from "@/components/McpConnectorsList";
 import { DEFAULT_MODEL } from "@/lib/types";
 import { loadDefaultModel, saveDefaultModel, saveConversations } from "@/lib/storage";
 
+gsap.registerPlugin(useGSAP);
+
 export default function SettingsPage() {
   const { data: session, status } = useSession();
   const [defaultModel, setDefaultModel] = useState(DEFAULT_MODEL);
   const [cleared, setCleared] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDefaultModel(loadDefaultModel());
   }, []);
+
+  useGSAP(
+    () => {
+      const sections = containerRef.current?.querySelectorAll("section");
+      if (!sections?.length) return;
+      gsap.fromTo(
+        sections,
+        { opacity: 0, y: 16, filter: "blur(3px)" },
+        {
+          opacity: 1,
+          y: 0,
+          filter: "blur(0px)",
+          duration: 0.6,
+          ease: "power3.out",
+          stagger: 0.06,
+        }
+      );
+    },
+    { scope: containerRef }
+  );
 
   function handleDefaultModelChange(model: string) {
     setDefaultModel(model);
@@ -32,11 +57,14 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-8 px-6 py-10">
+    <div
+      ref={containerRef}
+      className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-8 px-6 py-10"
+    >
       <div className="flex items-center gap-3">
         <Link
           href="/"
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-nimbus-border bg-nimbus-surface text-nimbus-text-muted shadow-[var(--nimbus-shadow)] transition-colors hover:text-nimbus-text"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-nimbus-border bg-nimbus-surface text-nimbus-text-muted shadow-[var(--nimbus-shadow)] transition-[transform,color] duration-300 ease-[var(--nimbus-ease)] hover:-translate-x-0.5 hover:text-nimbus-text active:scale-90"
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path
@@ -53,14 +81,10 @@ export default function SettingsPage() {
 
       <Section title="Account">
         {status === "loading" ? null : session?.user ? (
-          <div className="flex items-center gap-3 rounded-2xl border border-nimbus-border bg-nimbus-surface p-4 shadow-[var(--nimbus-shadow)]">
+          <Card className="flex items-center gap-3">
             {session.user.image ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={session.user.image}
-                alt=""
-                className="h-11 w-11 rounded-full"
-              />
+              <img src={session.user.image} alt="" className="h-11 w-11 rounded-full" />
             ) : (
               <div className="h-11 w-11 rounded-full bg-nimbus-accent-soft" />
             )}
@@ -68,31 +92,29 @@ export default function SettingsPage() {
               <p className="truncate text-sm font-medium text-nimbus-text">
                 {session.user.name ?? "Signed in"}
               </p>
-              <p className="truncate text-xs text-nimbus-text-muted">
-                {session.user.email}
-              </p>
+              <p className="truncate text-xs text-nimbus-text-muted">{session.user.email}</p>
             </div>
             <button
               type="button"
               onClick={() => signOut()}
-              className="shrink-0 rounded-[var(--nimbus-radius-pill)] border border-nimbus-border px-3 py-1.5 text-xs font-medium text-nimbus-text-muted transition-colors hover:text-nimbus-text"
+              className="shrink-0 rounded-[var(--nimbus-radius-pill)] border border-nimbus-border px-3 py-1.5 text-xs font-medium text-nimbus-text-muted transition-[color,transform] duration-300 ease-[var(--nimbus-ease)] hover:text-nimbus-text active:scale-95"
             >
               Sign out
             </button>
-          </div>
+          </Card>
         ) : (
-          <div className="flex items-center justify-between gap-3 rounded-2xl border border-nimbus-border bg-nimbus-surface p-4 shadow-[var(--nimbus-shadow)]">
+          <Card className="flex items-center justify-between gap-3">
             <p className="text-sm text-nimbus-text-muted">
               Sign in with GitHub to push code and connect repos.
             </p>
             <button
               type="button"
               onClick={() => signIn("github")}
-              className="shrink-0 rounded-[var(--nimbus-radius-pill)] bg-nimbus-accent px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+              className="shrink-0 rounded-[var(--nimbus-radius-pill)] bg-nimbus-accent px-4 py-2 text-sm font-medium text-white shadow-[var(--nimbus-glow)] transition-[opacity,transform] duration-300 ease-[var(--nimbus-ease)] hover:opacity-90 active:scale-95"
             >
               Sign in with GitHub
             </button>
-          </div>
+          </Card>
         )}
       </Section>
 
@@ -105,25 +127,37 @@ export default function SettingsPage() {
       </Section>
 
       <Section title="MCP connectors" description="Remote tool servers available to the assistant.">
-        <div className="rounded-2xl border border-nimbus-border bg-nimbus-surface p-4 shadow-[var(--nimbus-shadow)]">
+        <Card>
           <McpConnectorsList />
-        </div>
+        </Card>
       </Section>
 
       <Section title="Data">
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-nimbus-border bg-nimbus-surface p-4 shadow-[var(--nimbus-shadow)]">
+        <Card className="flex items-center justify-between gap-3">
           <p className="text-sm text-nimbus-text-muted">
-            {cleared ? "All local conversations cleared." : "Delete every saved conversation from this browser."}
+            {cleared
+              ? "All local conversations cleared."
+              : "Delete every saved conversation from this browser."}
           </p>
           <button
             type="button"
             onClick={handleClearData}
-            className="shrink-0 rounded-[var(--nimbus-radius-pill)] border border-red-500/30 px-4 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-500/10"
+            className="shrink-0 rounded-[var(--nimbus-radius-pill)] border border-red-500/30 px-4 py-2 text-sm font-medium text-red-500 transition-[background-color,transform] duration-300 ease-[var(--nimbus-ease)] hover:bg-red-500/10 active:scale-95"
           >
             Clear all chats
           </button>
-        </div>
+        </Card>
       </Section>
+    </div>
+  );
+}
+
+function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <div className="nimbus-shell shadow-[var(--nimbus-shadow)]">
+      <div className={`nimbus-shell-inner border border-nimbus-border bg-nimbus-surface p-4 ${className}`}>
+        {children}
+      </div>
     </div>
   );
 }

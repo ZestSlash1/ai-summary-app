@@ -17,12 +17,18 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geist.variable} h-full antialiased`}>
+    <html
+      lang="en"
+      className={`${geist.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="min-h-full flex bg-nimbus-bg text-nimbus-text">
-        <Providers>{children}</Providers>
+        <div id="nimbus-root">
+          <Providers>{children}</Providers>
+        </div>
       </body>
     </html>
   );

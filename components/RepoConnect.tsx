@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import type { GithubRepoLink } from "@/lib/types";
+import { PopoverPanel, usePopoverDismiss } from "./Popover";
 
 type RepoOption = {
   owner: string;
@@ -44,15 +45,7 @@ export function RepoConnect({
   const [error, setError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
+  usePopoverDismiss(open, () => setOpen(false), rootRef);
 
   useEffect(() => {
     if (!open || !session?.user || repos !== null) return;
@@ -96,7 +89,7 @@ export function RepoConnect({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-[var(--nimbus-radius-pill)] border border-nimbus-border bg-nimbus-surface px-3.5 py-2 text-sm font-medium text-nimbus-text shadow-[var(--nimbus-shadow)] transition-colors hover:border-nimbus-accent/40"
+        className="flex items-center gap-1.5 rounded-[var(--nimbus-radius-pill)] border border-nimbus-border bg-nimbus-surface px-3.5 py-2 text-sm font-medium text-nimbus-text shadow-[var(--nimbus-shadow)] transition-[transform,border-color] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-accent/40 active:scale-[0.97]"
       >
         {value ? (
           <span className="max-w-[10rem] truncate">
@@ -115,63 +108,61 @@ export function RepoConnect({
         )}
       </button>
 
-      {open && (
-        <div className="absolute bottom-full left-0 z-20 mb-2 w-72 rounded-2xl border border-nimbus-border bg-nimbus-surface p-3 shadow-[var(--nimbus-shadow-lift)]">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-nimbus-text-muted">
-            Your repos
-          </p>
-          <div className="mb-3 max-h-40 overflow-y-auto">
-            {repos === null && (
-              <p className="px-1 py-1 text-sm text-nimbus-text-muted">Loading…</p>
-            )}
-            {repos?.length === 0 && (
-              <p className="px-1 py-1 text-sm text-nimbus-text-muted">No repos found.</p>
-            )}
-            {repos?.map((repo) => (
-              <button
-                key={repo.fullName}
-                type="button"
-                onClick={() => connectExisting(repo)}
-                className="block w-full truncate rounded-lg px-2 py-1.5 text-left text-sm text-nimbus-text hover:bg-nimbus-bg"
-              >
-                {repo.fullName}
-              </button>
-            ))}
-          </div>
-          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-nimbus-text-muted">
-            Or create new
-          </p>
-          <div className="flex gap-1.5">
-            <input
-              value={newRepoName}
-              onChange={(e) => setNewRepoName(e.target.value)}
-              placeholder="repo-name"
-              className="flex-1 rounded-lg border border-nimbus-border bg-nimbus-bg px-2 py-1.5 text-sm text-nimbus-text placeholder:text-nimbus-text-muted focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={createAndConnect}
-              disabled={busy || !newRepoName.trim()}
-              className="rounded-lg bg-nimbus-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
-            >
-              Create
-            </button>
-          </div>
-          {error && <p className="mt-1.5 text-xs text-red-500">{error}</p>}
-          {value && (
-            <button
-              type="button"
-              onClick={() => {
-                onChange(undefined);
-                setOpen(false);
-              }}
-              className="mt-2 text-xs text-nimbus-text-muted hover:text-nimbus-text"
-            >
-              Disconnect
-            </button>
+      <PopoverPanel open={open} className="bottom-full left-0 mb-2 w-72 p-3">
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-nimbus-text-muted">
+          Your repos
+        </p>
+        <div className="mb-3 max-h-40 overflow-y-auto">
+          {repos === null && (
+            <p className="px-1 py-1 text-sm text-nimbus-text-muted">Loading…</p>
           )}
+          {repos?.length === 0 && (
+            <p className="px-1 py-1 text-sm text-nimbus-text-muted">No repos found.</p>
+          )}
+          {repos?.map((repo) => (
+            <button
+              key={repo.fullName}
+              type="button"
+              onClick={() => connectExisting(repo)}
+              className="block w-full truncate rounded-lg px-2 py-1.5 text-left text-sm text-nimbus-text transition-colors duration-200 ease-[var(--nimbus-ease)] hover:bg-nimbus-bg"
+            >
+              {repo.fullName}
+            </button>
+          ))}
         </div>
-      )}
+        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-nimbus-text-muted">
+          Or create new
+        </p>
+        <div className="flex gap-1.5">
+          <input
+            value={newRepoName}
+            onChange={(e) => setNewRepoName(e.target.value)}
+            placeholder="repo-name"
+            className="flex-1 rounded-lg border border-nimbus-border bg-nimbus-bg px-2 py-1.5 text-sm text-nimbus-text placeholder:text-nimbus-text-muted focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={createAndConnect}
+            disabled={busy || !newRepoName.trim()}
+            className="rounded-lg bg-nimbus-accent px-3 py-1.5 text-xs font-medium text-white transition-transform duration-200 ease-[var(--nimbus-ease)] active:scale-95 disabled:opacity-40"
+          >
+            Create
+          </button>
+        </div>
+        {error && <p className="mt-1.5 text-xs text-red-500">{error}</p>}
+        {value && (
+          <button
+            type="button"
+            onClick={() => {
+              onChange(undefined);
+              setOpen(false);
+            }}
+            className="mt-2 text-xs text-nimbus-text-muted transition-colors duration-200 ease-[var(--nimbus-ease)] hover:text-nimbus-text"
+          >
+            Disconnect
+          </button>
+        )}
+      </PopoverPanel>
     </div>
   );
 }

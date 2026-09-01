@@ -1,8 +1,13 @@
 "use client";
 
+import { useRef } from "react";
 import { signIn, useSession } from "next-auth/react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import { detectSkills } from "@/lib/skills";
 import type { GithubRepoLink } from "@/lib/types";
+
+gsap.registerPlugin(useGSAP);
 
 const MCP_NUDGE_KEYWORDS = [
   "search the web",
@@ -70,6 +75,19 @@ export function SkillPrompt({
   );
 }
 
+function useCardEntrance() {
+  const ref = useRef<HTMLDivElement>(null);
+  useGSAP(() => {
+    if (!ref.current) return;
+    gsap.fromTo(
+      ref.current,
+      { opacity: 0, y: 8, scale: 0.98 },
+      { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power3.out" }
+    );
+  }, []);
+  return ref;
+}
+
 function PromptCard({
   text,
   actionLabel,
@@ -79,13 +97,17 @@ function PromptCard({
   actionLabel: string;
   onAction: () => void;
 }) {
+  const ref = useCardEntrance();
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl border border-nimbus-accent/30 bg-nimbus-accent-soft px-4 py-2.5 text-sm text-nimbus-text">
+    <div
+      ref={ref}
+      className="flex items-center justify-between gap-3 rounded-2xl border border-nimbus-accent/30 bg-nimbus-accent-soft px-4 py-2.5 text-sm text-nimbus-text"
+    >
       <span>{text}</span>
       <button
         type="button"
         onClick={onAction}
-        className="shrink-0 rounded-[var(--nimbus-radius-pill)] bg-nimbus-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+        className="shrink-0 rounded-[var(--nimbus-radius-pill)] bg-nimbus-accent px-3 py-1.5 text-xs font-medium text-white shadow-[var(--nimbus-glow)] transition-[opacity,transform] duration-300 ease-[var(--nimbus-ease)] hover:opacity-90 active:scale-95"
       >
         {actionLabel}
       </button>
@@ -94,8 +116,12 @@ function PromptCard({
 }
 
 function TipCard({ text }: { text: string }) {
+  const ref = useCardEntrance();
   return (
-    <div className="rounded-2xl border border-nimbus-free/30 bg-nimbus-free-soft px-4 py-2.5 text-sm text-nimbus-text">
+    <div
+      ref={ref}
+      className="rounded-2xl border border-nimbus-free/30 bg-nimbus-free-soft px-4 py-2.5 text-sm text-nimbus-text"
+    >
       💡 {text}
     </div>
   );

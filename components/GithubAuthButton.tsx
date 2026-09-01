@@ -14,7 +14,7 @@ export function GithubAuthButton() {
       <button
         type="button"
         onClick={() => signIn("github")}
-        className="flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl border border-nimbus-border bg-nimbus-surface px-3 py-2.5 text-sm font-medium text-nimbus-text shadow-[var(--nimbus-shadow)] transition-colors hover:border-nimbus-accent/40"
+        className="flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl border border-nimbus-border bg-nimbus-surface px-3 py-2.5 text-sm font-medium text-nimbus-text shadow-[var(--nimbus-shadow)] transition-[transform,border-color] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-accent/40 active:scale-[0.97]"
       >
         <GithubMark className="h-4 w-4 shrink-0" />
         Sign in
@@ -40,7 +40,7 @@ export function GithubAuthButton() {
       <button
         type="button"
         onClick={() => signOut()}
-        className="text-xs text-nimbus-text-muted transition-colors hover:text-nimbus-text"
+        className="text-xs text-nimbus-text-muted transition-colors duration-300 ease-[var(--nimbus-ease)] hover:text-nimbus-text"
       >
         Sign out
       </button>
