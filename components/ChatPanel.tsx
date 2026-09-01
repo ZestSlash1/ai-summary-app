@@ -16,6 +16,7 @@ import { Mascot } from "./Mascot";
 import { extractPushableFiles } from "@/lib/codeBlocks";
 import type { McpConnector } from "@/lib/mcp";
 import type { GithubRepoLink } from "@/lib/types";
+import { loadModelSource } from "@/lib/storage";
 
 gsap.registerPlugin(useGSAP);
 
@@ -78,6 +79,7 @@ export function ChatPanel({
         api: "/api/chat",
         body: () => ({
           model: modelRef.current,
+          modelSource: loadModelSource(),
           mcpConnectors: connectorsRef.current
             .filter((c) => c.enabled)
             .map((c) => ({ url: c.url, authHeader: c.authHeader })),

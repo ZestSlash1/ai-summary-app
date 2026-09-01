@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ModelOption } from "@/lib/types";
+import { loadModelSource } from "@/lib/storage";
 import { PopoverPanel, usePopoverDismiss } from "./Popover";
 
 export function ModelSwitcher({
@@ -13,11 +14,17 @@ export function ModelSwitcher({
 }) {
   const [models, setModels] = useState<ModelOption[] | null>(null);
   const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Fetches on mount (so the pill shows a real label immediately) and
+    // again on every open (the model source is a global setting that can
+    // change on this same page — Settings, right next to the source
+    // toggle — so a mount-only fetch could show a stale list once opened).
     let cancelled = false;
-    fetch("/api/models")
+    const source = loadModelSource();
+    fetch(`/api/models?source=${source}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
       .then((data: ModelOption[]) => {
         if (!cancelled) setModels(data);
@@ -28,12 +35,19 @@ export function ModelSwitcher({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [open]);
 
   usePopoverDismiss(open, () => setOpen(false), rootRef);
 
   const current = models?.find((m) => m.id === value);
   const label = current?.name ?? value.split("/").pop() ?? value;
+
+  const filtered = useMemo(() => {
+    if (!models) return null;
+    const q = filter.trim().toLowerCase();
+    if (!q) return models;
+    return models.filter((m) => m.name.toLowerCase().includes(q));
+  }, [models, filter]);
 
   return (
     <div ref={rootRef} className="relative">
@@ -65,35 +79,48 @@ export function ModelSwitcher({
         </svg>
       </button>
 
-      <PopoverPanel open={open} className="bottom-full left-0 mb-2 max-h-72 w-72 overflow-y-auto p-1.5">
-        {models === null && (
-          <p className="px-3 py-2 text-sm text-nimbus-text-muted">Loading models…</p>
+      <PopoverPanel open={open} className="bottom-full left-0 mb-2 flex w-72 flex-col p-1.5">
+        {models !== null && models.length > 8 && (
+          <input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter models…"
+            className="mb-1.5 shrink-0 rounded-lg border border-nimbus-border bg-nimbus-bg px-2.5 py-1.5 text-sm text-nimbus-text placeholder:text-nimbus-text-muted focus:outline-none"
+          />
         )}
-        {models?.length === 0 && (
-          <p className="px-3 py-2 text-sm text-nimbus-text-muted">Couldn&apos;t load models.</p>
-        )}
-        {models?.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            onClick={() => {
-              onChange(m.id);
-              setOpen(false);
-            }}
-            className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors duration-200 ease-[var(--nimbus-ease)] ${
-              m.id === value
-                ? "bg-nimbus-accent-soft text-nimbus-accent"
-                : "text-nimbus-text hover:bg-nimbus-bg"
-            }`}
-          >
-            <span className="truncate">{m.name}</span>
-            {m.free && (
-              <span className="shrink-0 rounded-[var(--nimbus-radius-pill)] bg-nimbus-free-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-nimbus-free">
-                Free
-              </span>
-            )}
-          </button>
-        ))}
+        <div className="max-h-64 overflow-y-auto">
+          {models === null && (
+            <p className="px-3 py-2 text-sm text-nimbus-text-muted">Loading models…</p>
+          )}
+          {models?.length === 0 && (
+            <p className="px-3 py-2 text-sm text-nimbus-text-muted">Couldn&apos;t load models.</p>
+          )}
+          {filtered?.length === 0 && models && models.length > 0 && (
+            <p className="px-3 py-2 text-sm text-nimbus-text-muted">No matches.</p>
+          )}
+          {filtered?.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => {
+                onChange(m.id);
+                setOpen(false);
+              }}
+              className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors duration-200 ease-[var(--nimbus-ease)] ${
+                m.id === value
+                  ? "bg-nimbus-accent-soft text-nimbus-accent"
+                  : "text-nimbus-text hover:bg-nimbus-bg"
+              }`}
+            >
+              <span className="truncate">{m.name}</span>
+              {m.free && (
+                <span className="shrink-0 rounded-[var(--nimbus-radius-pill)] bg-nimbus-free-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-nimbus-free">
+                  Free
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </PopoverPanel>
     </div>
   );

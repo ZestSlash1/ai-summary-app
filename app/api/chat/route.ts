@@ -7,6 +7,7 @@ import {
   type ToolSet,
 } from 'ai';
 import { createMCPClient } from '@ai-sdk/mcp';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { z } from 'zod';
 import { after } from 'next/server';
 import { auth } from '@/auth';
@@ -47,6 +48,21 @@ Only add a path when the code is meant to be saved as a real file in the user's 
 
 type McpConnectorInput = { url: string; authHeader?: string };
 type GithubRepoInput = { owner: string; name: string; branch: string };
+type ModelSource = 'gateway' | 'omniroute';
+
+let omniroute: ReturnType<typeof createOpenAICompatible> | null = null;
+
+function resolveModel(model: string, source: ModelSource | undefined) {
+  if (source !== 'omniroute') return model;
+  if (!omniroute) {
+    const baseURL = process.env.OMNIROUTE_BASE_URL;
+    if (!baseURL) {
+      throw new Error('OmniRoute is not configured (OMNIROUTE_BASE_URL missing).');
+    }
+    omniroute = createOpenAICompatible({ name: 'omniroute', baseURL });
+  }
+  return omniroute(model);
+}
 
 function textOf(message: UIMessage): string {
   return message.parts
@@ -59,11 +75,13 @@ export async function POST(request: Request) {
   const {
     messages,
     model,
+    modelSource,
     mcpConnectors,
     githubRepo,
   }: {
     messages: UIMessage[];
     model?: string;
+    modelSource?: ModelSource;
     mcpConnectors?: McpConnectorInput[];
     githubRepo?: GithubRepoInput;
   } = await request.json();
@@ -140,8 +158,10 @@ export async function POST(request: Request) {
     }
   }
 
+  const defaultModel = modelSource === 'omniroute' ? 'auto/best-coding' : 'minimax/minimax-m3';
+
   const result = streamText({
-    model: model || 'minimax/minimax-m3',
+    model: resolveModel(model || defaultModel, modelSource),
     system: systemPrompt,
     messages: await convertToModelMessages(messages),
     tools,

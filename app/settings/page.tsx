@@ -7,6 +7,7 @@ import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ModelSwitcher } from "@/components/ModelSwitcher";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ModelSourceToggle } from "@/components/ModelSourceToggle";
 import { McpConnectorsList } from "@/components/McpConnectorsList";
 import { DEFAULT_MODEL } from "@/lib/types";
 import { loadDefaultModel, saveDefaultModel, saveConversations } from "@/lib/storage";
@@ -159,6 +160,13 @@ export default function SettingsPage() {
 
       <Section title="Appearance" description="OLED-friendly dark theme, or follow your system.">
         <ThemeToggle />
+      </Section>
+
+      <Section
+        title="Model source"
+        description="Where chat models come from — applies to every message app-wide."
+      >
+        <ModelSourceToggle />
       </Section>
 
       <Section title="Default model" description="Used for every new conversation.">

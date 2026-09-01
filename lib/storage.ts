@@ -4,6 +4,7 @@ import { DEFAULT_MODEL } from "./types";
 const CONVERSATIONS_KEY = "nimbus-conversations";
 const ACTIVE_ID_KEY = "nimbus-active-conversation";
 const DEFAULT_MODEL_KEY = "nimbus-default-model";
+const MODEL_SOURCE_KEY = "nimbus-model-source";
 
 export function loadConversations(): Conversation[] {
   if (typeof window === "undefined") return [];
@@ -57,6 +58,20 @@ export function loadDefaultModel(): string {
 export function saveDefaultModel(model: string) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(DEFAULT_MODEL_KEY, model);
+}
+
+export type ModelSource = "gateway" | "omniroute";
+
+export function loadModelSource(): ModelSource {
+  if (typeof window === "undefined") return "gateway";
+  return window.localStorage.getItem(MODEL_SOURCE_KEY) === "omniroute"
+    ? "omniroute"
+    : "gateway";
+}
+
+export function saveModelSource(source: ModelSource) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(MODEL_SOURCE_KEY, source);
 }
 
 export function titleFromMessage(text: string): string {
