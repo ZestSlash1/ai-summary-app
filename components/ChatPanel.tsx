@@ -157,15 +157,18 @@ export function ChatPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages]);
 
-  // Guards against a double-send: `isStreaming` only flips true once React
+  // Guards against a double-send: `status` only updates once React
   // re-renders after sendMessage's first tick, leaving a brief window where
   // a fast double-click/double-Enter can fire the request twice. This ref
-  // closes that window synchronously; the effect below releases it once the
-  // real status catches up.
+  // closes that window synchronously; the effect below releases it on the
+  // very next status change of any kind (streaming, finished, OR errored —
+  // must not wait specifically for "streaming", since a fast-failing
+  // request can go straight to an error status and never pass through it,
+  // which would otherwise latch the guard closed forever).
   const sendingRef = useRef(false);
   useEffect(() => {
-    if (isStreaming) sendingRef.current = false;
-  }, [isStreaming]);
+    sendingRef.current = false;
+  }, [status]);
 
   function trySend(text: string) {
     if (!text.trim() || isStreaming || sendingRef.current) return;
