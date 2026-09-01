@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       repo,
       branch,
       files,
-      message?.trim() || "Update from Nimbus"
+      message?.trim() || "Update from ARO"
     );
     return Response.json(result);
   } catch (err) {

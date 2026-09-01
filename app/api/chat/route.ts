@@ -31,7 +31,7 @@ const builtinTools = {
   }),
 };
 
-const SYSTEM_PROMPT = `You are Nimbus, a coding-focused assistant. You help write, explain, and debug code.
+const SYSTEM_PROMPT = `You are ARO, a coding-focused assistant. You help write, explain, and debug code.
 
 When you write code that belongs in a project file (not a throwaway snippet), tag the fence with its path using the "language:relative/path" convention, e.g.:
 

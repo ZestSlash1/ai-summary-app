@@ -104,7 +104,7 @@ export function ChatPanel({
           repo: repo.name,
           branch: repo.branch,
           files,
-          message: `Nimbus: update ${files.length} file${files.length === 1 ? "" : "s"}`,
+          message: `ARO: update ${files.length} file${files.length === 1 ? "" : "s"}`,
         }),
       });
       if (!res.ok) throw new Error();
@@ -235,7 +235,7 @@ export function ChatPanel({
   return (
     <div
       ref={containerRef}
-      className="flex flex-1 flex-col items-center overflow-hidden px-4 py-8 sm:py-12"
+      className="flex flex-1 flex-col items-center overflow-hidden px-4 pb-4 pt-20 sm:px-6 sm:pb-8 sm:pt-12 md:pt-8"
     >
       <div className="flex w-full max-w-2xl flex-1 flex-col gap-6 overflow-hidden">
         {messages.length === 0 ? (
@@ -336,60 +336,64 @@ export function ChatPanel({
         <div className="nimbus-shell shadow-[var(--nimbus-shadow)]">
           <form
             onSubmit={handleSubmit}
-            className="nimbus-shell-inner nimbus-glass flex items-center gap-2 border border-nimbus-border bg-nimbus-surface/90 p-2"
+            className="nimbus-shell-inner nimbus-glass flex flex-col gap-2 border border-nimbus-border bg-nimbus-surface/90 p-2 sm:flex-row sm:items-center"
           >
-            <ModelSwitcher value={model} onChange={onModelChange} />
-            <RepoConnect
-              value={githubRepo}
-              onChange={onRepoChange}
-              pushStatus={pushStatus}
-              forceOpen={repoPromptOpen}
-              onForceOpenHandled={() => setRepoPromptOpen(false)}
-            />
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setMcpOpen((v) => !v)}
-                className="flex items-center gap-1 rounded-[var(--nimbus-radius-pill)] border border-nimbus-border bg-nimbus-surface px-3 py-2 text-xs font-medium text-nimbus-text-muted shadow-[var(--nimbus-shadow)] transition-[transform,border-color] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-accent/40 active:scale-[0.96]"
-              >
-                MCP
-                {enabledConnectors.filter((c) => c.enabled).length > 0 && (
-                  <span className="h-1.5 w-1.5 rounded-full bg-nimbus-free" />
-                )}
-              </button>
-              <McpConnectors
-                open={mcpOpen}
-                onOpenChange={setMcpOpen}
-                onConnectorsChange={setEnabledConnectors}
+            <div className="flex items-center gap-2 overflow-x-auto sm:overflow-visible">
+              <ModelSwitcher value={model} onChange={onModelChange} />
+              <RepoConnect
+                value={githubRepo}
+                onChange={onRepoChange}
+                pushStatus={pushStatus}
+                forceOpen={repoPromptOpen}
+                onForceOpenHandled={() => setRepoPromptOpen(false)}
               />
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setMcpOpen((v) => !v)}
+                  className="flex items-center gap-1 rounded-[var(--nimbus-radius-pill)] border border-nimbus-border bg-nimbus-surface px-3 py-2 text-xs font-medium text-nimbus-text-muted shadow-[var(--nimbus-shadow)] transition-[transform,border-color] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-accent/40 active:scale-[0.96]"
+                >
+                  MCP
+                  {enabledConnectors.filter((c) => c.enabled).length > 0 && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-nimbus-free" />
+                  )}
+                </button>
+                <McpConnectors
+                  open={mcpOpen}
+                  onOpenChange={setMcpOpen}
+                  onConnectorsChange={setEnabledConnectors}
+                />
+              </div>
             </div>
-            <input
-              className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm text-nimbus-text placeholder:text-nimbus-text-muted focus:outline-none disabled:opacity-50"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask something…"
-              disabled={isStreaming}
-            />
-            <button
-              type="submit"
-              disabled={isStreaming || !input.trim()}
-              onPointerEnter={handleSendPointerEnter}
-              onPointerLeave={handleSendPointerLeave}
-              aria-label="Send message"
-              className="group/send flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-nimbus-accent text-white shadow-[var(--nimbus-glow)] transition-[opacity,box-shadow,transform] duration-300 ease-[var(--nimbus-ease)] hover:opacity-90 active:scale-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
-            >
-              <span ref={sendIconRef} className="flex h-6 w-6 items-center justify-center rounded-full bg-white/15">
-                <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-                  <path
-                    d="M7 11.5V2.5M7 2.5 3 6.5M7 2.5l4 4"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </span>
-            </button>
+            <div className="flex flex-1 items-center gap-2">
+              <input
+                className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm text-nimbus-text placeholder:text-nimbus-text-muted focus:outline-none disabled:opacity-50"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask something…"
+                disabled={isStreaming}
+              />
+              <button
+                type="submit"
+                disabled={isStreaming || !input.trim()}
+                onPointerEnter={handleSendPointerEnter}
+                onPointerLeave={handleSendPointerLeave}
+                aria-label="Send message"
+                className="group/send flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-nimbus-accent text-white shadow-[var(--nimbus-glow)] transition-[opacity,box-shadow,transform] duration-300 ease-[var(--nimbus-ease)] hover:opacity-90 active:scale-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+              >
+                <span ref={sendIconRef} className="flex h-6 w-6 items-center justify-center rounded-full bg-white/15">
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                    <path
+                      d="M7 11.5V2.5M7 2.5 3 6.5M7 2.5l4 4"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+              </button>
+            </div>
           </form>
         </div>
       </div>

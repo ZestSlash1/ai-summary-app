@@ -20,6 +20,7 @@ export default function Home() {
     null
   );
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     // One-time hydration from localStorage: must run after mount since
@@ -55,11 +56,13 @@ export default function Home() {
     persist([...conversations, fresh]);
     setActiveId(fresh.id);
     saveActiveId(fresh.id);
+    setSidebarOpen(false);
   }
 
   function handleSelect(id: string) {
     setActiveId(id);
     saveActiveId(id);
+    setSidebarOpen(false);
   }
 
   function handleModelChange(model: string) {
@@ -107,13 +110,32 @@ export default function Home() {
   }
 
   return (
-    <div className="flex h-screen w-full">
+    <div className="flex h-screen w-full overflow-hidden">
       <Sidebar
         conversations={conversations}
         activeId={active.id}
         onSelect={handleSelect}
         onNewChat={handleNewChat}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
+      <button
+        type="button"
+        onClick={() => setSidebarOpen(true)}
+        aria-label="Open menu"
+        className={`fixed left-4 top-4 z-20 flex h-10 w-10 items-center justify-center rounded-xl border border-nimbus-border bg-nimbus-surface text-nimbus-text shadow-[var(--nimbus-shadow)] transition-opacity duration-300 ease-[var(--nimbus-ease)] md:hidden ${
+          sidebarOpen ? "pointer-events-none opacity-0" : "opacity-100"
+        }`}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path
+            d="M2 4h12M2 8h12M2 12h12"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        </svg>
+      </button>
       <ChatPanel
         key={active.id}
         conversationId={active.id}

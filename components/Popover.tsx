@@ -50,7 +50,7 @@ export function PopoverPanel({
   return (
     <div
       ref={panelRef}
-      className={`nimbus-glass absolute z-20 rounded-2xl border border-nimbus-border bg-nimbus-surface/90 shadow-[var(--nimbus-shadow-lift)] ${
+      className={`nimbus-glass absolute z-20 max-w-[calc(100vw-2rem)] rounded-2xl border border-nimbus-border bg-nimbus-surface/90 shadow-[var(--nimbus-shadow-lift)] ${
         open ? "" : "hidden"
       } ${className}`}
     >

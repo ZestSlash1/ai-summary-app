@@ -20,7 +20,7 @@ export function MessageActions({
   }
 
   return (
-    <div className="mt-1.5 flex items-center gap-1 opacity-0 transition-opacity duration-200 ease-[var(--nimbus-ease)] group-hover:opacity-100 focus-within:opacity-100">
+    <div className="mt-1.5 flex items-center gap-1 opacity-100 transition-opacity duration-200 ease-[var(--nimbus-ease)] md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100">
       <ActionButton label={copied ? "Copied" : "Copy"} onClick={handleCopy}>
         {copied ? (
           <path

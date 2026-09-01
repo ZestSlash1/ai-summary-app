@@ -11,8 +11,8 @@ const geist = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Nimbus",
-  description: "A friendly conversational agent with multi-step tool use.",
+  title: "ARO",
+  description: "A friendly coding assistant that pushes straight to GitHub.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
