@@ -148,3 +148,56 @@ export async function pushFiles(
 
   return { commitUrl: commit.html_url, commitSha: commit.sha };
 }
+
+const BINARY_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "ico", "svg", "woff", "woff2", "ttf",
+  "eot", "mp4", "mov", "webm", "mp3", "wav", "zip", "gz", "tar", "pdf",
+  "lock",
+]);
+
+/** Fetches text file contents from a repo's default branch, for backfilling
+ * project memory from files ARO didn't push itself. Skips binary-looking
+ * extensions and caps size/count so the embedding job stays bounded. */
+export async function listRepoTextFiles(
+  token: string,
+  owner: string,
+  repo: string,
+  branch: string,
+  options?: { maxFiles?: number; maxBytes?: number }
+): Promise<PushFile[]> {
+  const maxFiles = options?.maxFiles ?? 150;
+  const maxBytes = options?.maxBytes ?? 60000;
+
+  const tree = await gh<{
+    tree: { path: string; type: string; sha: string; size?: number }[];
+  }>(token, `/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`);
+
+  const candidates = tree.tree
+    .filter((entry) => entry.type === "blob")
+    .filter((entry) => {
+      const ext = entry.path.split(".").pop()?.toLowerCase() ?? "";
+      return !BINARY_EXTENSIONS.has(ext);
+    })
+    .filter((entry) => !entry.size || entry.size <= maxBytes)
+    .slice(0, maxFiles);
+
+  const files = await Promise.all(
+    candidates.map(async (entry) => {
+      try {
+        const blob = await gh<{ content: string; encoding: string }>(
+          token,
+          `/repos/${owner}/${repo}/git/blobs/${entry.sha}`
+        );
+        if (blob.encoding !== "base64") return null;
+        const buf = Buffer.from(blob.content, "base64");
+        const hasNulByte = buf.indexOf(0) !== -1;
+        if (hasNulByte) return null;
+        return { path: entry.path, content: buf.toString("utf8") };
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return files.filter((f): f is PushFile => f !== null);
+}

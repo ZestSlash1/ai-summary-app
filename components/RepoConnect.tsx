@@ -43,6 +43,8 @@ export function RepoConnect({
   const [newRepoName, setNewRepoName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   usePopoverDismiss(open, () => setOpen(false), rootRef);
@@ -60,6 +62,30 @@ export function RepoConnect({
   async function connectExisting(repo: RepoOption) {
     onChange({ owner: repo.owner, name: repo.name, branch: repo.defaultBranch });
     setOpen(false);
+  }
+
+  async function syncMemory() {
+    if (!value) return;
+    setSyncing(true);
+    setSyncStatus(null);
+    try {
+      const res = await fetch("/api/memory/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          owner: value.owner,
+          repo: value.name,
+          branch: value.branch,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Sync failed.");
+      setSyncStatus(`Indexed ${data.ingested} file${data.ingested === 1 ? "" : "s"}.`);
+    } catch (err) {
+      setSyncStatus(err instanceof Error ? err.message : "Sync failed.");
+    } finally {
+      setSyncing(false);
+    }
   }
 
   async function createAndConnect() {
@@ -151,16 +177,29 @@ export function RepoConnect({
         </div>
         {error && <p className="mt-1.5 text-xs text-red-500">{error}</p>}
         {value && (
-          <button
-            type="button"
-            onClick={() => {
-              onChange(undefined);
-              setOpen(false);
-            }}
-            className="mt-2 text-xs text-nimbus-text-muted transition-colors duration-200 ease-[var(--nimbus-ease)] hover:text-nimbus-text"
-          >
-            Disconnect
-          </button>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                onChange(undefined);
+                setOpen(false);
+              }}
+              className="text-xs text-nimbus-text-muted transition-colors duration-200 ease-[var(--nimbus-ease)] hover:text-nimbus-text"
+            >
+              Disconnect
+            </button>
+            <button
+              type="button"
+              onClick={syncMemory}
+              disabled={syncing}
+              className="text-xs text-nimbus-accent transition-colors duration-200 ease-[var(--nimbus-ease)] hover:opacity-80 disabled:opacity-40"
+            >
+              {syncing ? "Indexing…" : "Sync repo memory"}
+            </button>
+          </div>
+        )}
+        {syncStatus && (
+          <p className="mt-1.5 text-xs text-nimbus-text-muted">{syncStatus}</p>
         )}
       </PopoverPanel>
     </div>

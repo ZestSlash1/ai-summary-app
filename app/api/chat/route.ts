@@ -8,6 +8,10 @@ import {
 } from 'ai';
 import { createMCPClient } from '@ai-sdk/mcp';
 import { z } from 'zod';
+import { after } from 'next/server';
+import { auth } from '@/auth';
+import { retrieveMemory } from '@/lib/memory';
+import { getUserSkills, logSignalAndMaybePropose, messageMatchesKnownSkill } from '@/lib/skillDiscovery';
 
 export const maxDuration = 30;
 
@@ -31,7 +35,7 @@ const builtinTools = {
   }),
 };
 
-const SYSTEM_PROMPT = `You are ARO, a coding-focused assistant. You help write, explain, and debug code.
+const BASE_SYSTEM_PROMPT = `You are ARO, a coding-focused assistant. You help write, explain, and debug code.
 
 When you write code that belongs in a project file (not a throwaway snippet), tag the fence with its path using the "language:relative/path" convention, e.g.:
 
@@ -42,17 +46,32 @@ When you write code that belongs in a project file (not a throwaway snippet), ta
 Only add a path when the code is meant to be saved as a real file in the user's project — short illustrative snippets don't need one. Use tools when they give a more accurate answer than reasoning alone. Only mention capabilities you actually have.`;
 
 type McpConnectorInput = { url: string; authHeader?: string };
+type GithubRepoInput = { owner: string; name: string; branch: string };
+
+function textOf(message: UIMessage): string {
+  return message.parts
+    .filter((p) => p.type === 'text')
+    .map((p) => (p as { text: string }).text)
+    .join('\n\n');
+}
 
 export async function POST(request: Request) {
   const {
     messages,
     model,
     mcpConnectors,
+    githubRepo,
   }: {
     messages: UIMessage[];
     model?: string;
     mcpConnectors?: McpConnectorInput[];
+    githubRepo?: GithubRepoInput;
   } = await request.json();
+
+  const session = await auth();
+  const userId = session?.githubUserId;
+  const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
+  const lastUserText = lastUserMessage ? textOf(lastUserMessage) : '';
 
   const mcpClients = await Promise.all(
     (mcpConnectors ?? []).map((connector) =>
@@ -78,9 +97,52 @@ export async function POST(request: Request) {
     ...mcpToolSets.filter(Boolean)
   );
 
+  let systemPrompt = BASE_SYSTEM_PROMPT;
+
+  // Project memory: recall relevant chunks from a connected repo, so the
+  // assistant isn't starting cold each session.
+  if (userId && githubRepo && lastUserText.trim()) {
+    try {
+      const matches = await retrieveMemory(
+        userId,
+        `${githubRepo.owner}/${githubRepo.name}`,
+        lastUserText,
+        5
+      );
+      if (matches.length > 0) {
+        systemPrompt += `\n\nRelevant project context from ${githubRepo.owner}/${githubRepo.name} (recalled from earlier sessions, may be partial or stale):\n\n${matches
+          .map((m) => `File: ${m.path}\n${m.content.slice(0, 1500)}`)
+          .join('\n\n---\n\n')}`;
+      }
+    } catch {
+      // Memory is a nice-to-have; a retrieval failure shouldn't block chat.
+    }
+  }
+
+  // Learned skills: mention approved ones so the model knows what it can
+  // proactively offer, and log a signal when the message doesn't match
+  // anything known yet (the autonomous-discovery input).
+  if (userId) {
+    try {
+      const { approved } = await getUserSkills(userId);
+      if (approved.length > 0) {
+        systemPrompt += `\n\nThis user has approved these learned skills — use them when relevant:\n${approved
+          .map((s) => `- ${s.name}: ${s.description}`)
+          .join('\n')}`;
+      }
+      if (lastUserText.trim() && !messageMatchesKnownSkill(lastUserText, approved)) {
+        // Scheduled for after the response is sent — this must never add
+        // latency to the user-visible reply.
+        after(() => logSignalAndMaybePropose(userId, lastUserText));
+      }
+    } catch {
+      // Non-critical background bookkeeping.
+    }
+  }
+
   const result = streamText({
     model: model || 'minimax/minimax-m3',
-    system: SYSTEM_PROMPT,
+    system: systemPrompt,
     messages: await convertToModelMessages(messages),
     tools,
     stopWhen: stepCountIs(5),

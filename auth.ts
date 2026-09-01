@@ -15,12 +15,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (account?.access_token) {
         token.githubAccessToken = account.access_token;
       }
+      if (account?.providerAccountId) {
+        token.githubUserId = account.providerAccountId;
+      }
       return token;
     },
     async session({ session, token }) {
       session.githubAccessToken = token.githubAccessToken as
         | string
         | undefined;
+      session.githubUserId = token.githubUserId as string | undefined;
       return session;
     },
   },

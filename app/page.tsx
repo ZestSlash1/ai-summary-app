@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { UIMessage } from "ai";
+import { useSession } from "next-auth/react";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatPanel } from "@/components/ChatPanel";
 import type { Conversation, GithubRepoLink } from "@/lib/types";
@@ -14,54 +15,112 @@ import {
   saveConversations,
   titleFromMessage,
 } from "@/lib/storage";
+import {
+  createConversationRemote,
+  fetchConversations,
+  patchConversationRemote,
+} from "@/lib/db";
 
 export default function Home() {
+  const { data: session, status: sessionStatus } = useSession();
+  const isRemote = !!session?.user;
+
   const [conversations, setConversations] = useState<Conversation[] | null>(
     null
   );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const hydratedForRef = useRef<"anon" | "remote" | null>(null);
 
   useEffect(() => {
-    // One-time hydration from localStorage: must run after mount since
-    // localStorage isn't available during server rendering.
+    if (sessionStatus === "loading") return;
+    const mode = isRemote ? "remote" : "anon";
+    if (hydratedForRef.current === mode) return;
+    hydratedForRef.current = mode;
+
     /* eslint-disable react-hooks/set-state-in-effect */
-    const stored = loadConversations();
-    if (stored.length > 0) {
-      setConversations(stored);
-      const storedActive = loadActiveId();
-      setActiveId(
-        storedActive && stored.some((c) => c.id === storedActive)
-          ? storedActive
-          : stored[0].id
-      );
-    } else {
-      const fresh = createConversation();
-      setConversations([fresh]);
-      setActiveId(fresh.id);
+    if (!isRemote) {
+      // One-time hydration from localStorage: must run after mount since
+      // localStorage isn't available during server rendering.
+      const stored = loadConversations();
+      if (stored.length > 0) {
+        setConversations(stored);
+        const storedActive = loadActiveId();
+        setActiveId(
+          storedActive && stored.some((c) => c.id === storedActive)
+            ? storedActive
+            : stored[0].id
+        );
+      } else {
+        const fresh = createConversation();
+        setConversations([fresh]);
+        setActiveId(fresh.id);
+      }
+      return;
     }
+
+    (async () => {
+      let remote = await fetchConversations();
+
+      // One-time migration: a signed-in user with local-only history from
+      // before they signed in gets it pushed up, then localStorage is
+      // cleared so it isn't offered again on a later sign-out.
+      if (remote.length === 0) {
+        const local = loadConversations();
+        if (local.length > 0) {
+          for (const c of local) {
+            const created = await createConversationRemote(c.model);
+            if (created) {
+              await patchConversationRemote(created.id, {
+                title: c.title,
+                messages: c.messages,
+                githubRepo: c.githubRepo,
+              });
+            }
+          }
+          remote = await fetchConversations();
+          saveConversations([]);
+        }
+      }
+
+      if (remote.length === 0) {
+        const created = await createConversationRemote(DEFAULT_MODEL);
+        if (created) remote = [created];
+      }
+
+      setConversations(remote);
+      setActiveId(remote[0]?.id ?? null);
+    })();
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
+  }, [sessionStatus, isRemote]);
 
   const active = conversations?.find((c) => c.id === activeId);
 
   function persist(next: Conversation[]) {
     setConversations(next);
-    saveConversations(next);
+    if (!isRemote) saveConversations(next);
   }
 
   function handleNewChat() {
     if (!conversations) return;
+    setSidebarOpen(false);
+    if (isRemote) {
+      createConversationRemote(DEFAULT_MODEL).then((created) => {
+        if (!created) return;
+        persist([...conversations, created]);
+        setActiveId(created.id);
+      });
+      return;
+    }
     const fresh = createConversation();
     persist([...conversations, fresh]);
     setActiveId(fresh.id);
     saveActiveId(fresh.id);
-    setSidebarOpen(false);
   }
 
   function handleSelect(id: string) {
     setActiveId(id);
-    saveActiveId(id);
+    if (!isRemote) saveActiveId(id);
     setSidebarOpen(false);
   }
 
@@ -70,6 +129,7 @@ export default function Home() {
     persist(
       conversations.map((c) => (c.id === activeId ? { ...c, model } : c))
     );
+    if (isRemote) patchConversationRemote(activeId, { model });
   }
 
   function handleRepoChange(repo: GithubRepoLink | undefined) {
@@ -79,30 +139,28 @@ export default function Home() {
         c.id === activeId ? { ...c, githubRepo: repo } : c
       )
     );
+    if (isRemote) patchConversationRemote(activeId, { githubRepo: repo });
   }
 
   function handleMessagesUpdate(messages: UIMessage[]) {
     if (!conversations || !activeId) return;
+    const current = conversations.find((c) => c.id === activeId);
     const textPart = messages
       .find((m) => m.role === "user")
       ?.parts.find((p) => p.type === "text" && p.text.trim());
     const firstUserText =
       textPart && "text" in textPart ? textPart.text : undefined;
+    const title =
+      current?.title === "New chat" && firstUserText
+        ? titleFromMessage(firstUserText)
+        : current?.title ?? "New chat";
 
     persist(
       conversations.map((c) =>
-        c.id === activeId
-          ? {
-              ...c,
-              messages,
-              title:
-                c.title === "New chat" && firstUserText
-                  ? titleFromMessage(firstUserText)
-                  : c.title,
-            }
-          : c
+        c.id === activeId ? { ...c, messages, title } : c
       )
     );
+    if (isRemote) patchConversationRemote(activeId, { messages, title });
   }
 
   if (!conversations || !active) {

@@ -4,9 +4,11 @@ export type Skill = {
   description: string;
   usageTip: string;
   keywords: string[];
+  status?: "proposed" | "approved" | "rejected";
+  evidence?: string;
 };
 
-export const SKILLS: Skill[] = [
+export const BUILTIN_SKILLS: Skill[] = [
   {
     id: "github-push",
     name: "GitHub Push",
@@ -25,10 +27,12 @@ export const SKILLS: Skill[] = [
   },
 ];
 
-/** Keyword-matches the latest user message against the skill registry. */
-export function detectSkills(message: string): Skill[] {
+/** Keyword-matches a message against a skill list. Client-safe, no network
+ * or DB access — callers supply whichever skills (built-in, approved,
+ * both) should be considered. */
+export function matchSkills(message: string, skills: Skill[]): Skill[] {
   const lower = message.toLowerCase();
-  return SKILLS.filter((skill) =>
+  return skills.filter((skill) =>
     skill.keywords.some((kw) => lower.includes(kw))
   );
 }

@@ -81,6 +81,7 @@ export function ChatPanel({
           mcpConnectors: connectorsRef.current
             .filter((c) => c.enabled)
             .map((c) => ({ url: c.url, authHeader: c.authHeader })),
+          githubRepo: repoRef.current,
         }),
       })
   );
@@ -112,6 +113,13 @@ export function ChatPanel({
         state: "pushed",
         label: `Pushed ${files.length} file${files.length === 1 ? "" : "s"} to ${repo.owner}/${repo.name}`,
       });
+      // Keep project memory current with what was just pushed. Best-effort:
+      // a failed ingest shouldn't surface as a push failure to the user.
+      fetch("/api/memory/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo: `${repo.owner}/${repo.name}`, files }),
+      }).catch(() => {});
     } catch {
       setPushStatus({ state: "error", label: "Push failed" });
     }
@@ -153,9 +161,14 @@ export function ChatPanel({
       | undefined;
 
   useEffect(() => {
+    // Skip mid-stream: `messages` updates on every token, and for signed-in
+    // users each update now triggers a real network write, not just a
+    // localStorage write. Persist once a turn settles instead of on every
+    // chunk — still "every message exchange", just not every token of one.
+    if (isStreaming) return;
     onMessagesUpdate(messages);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages]);
+  }, [messages, isStreaming]);
 
   // Guards against a double-send: `status` only updates once React
   // re-renders after sendMessage's first tick, leaving a brief window where
