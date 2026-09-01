@@ -30,6 +30,12 @@ export default function Home() {
   );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Starts optimistic; flips to false if Supabase turns out to be
+  // unreachable (e.g. this deployment has no Supabase configured), so a
+  // signed-in user degrades to local-only instead of ending up with zero
+  // conversations and a blank page.
+  const [remoteOk, setRemoteOk] = useState(true);
+  const useRemote = isRemote && remoteOk;
   const hydratedForRef = useRef<"anon" | "remote" | null>(null);
 
   useEffect(() => {
@@ -39,7 +45,7 @@ export default function Home() {
     hydratedForRef.current = mode;
 
     /* eslint-disable react-hooks/set-state-in-effect */
-    if (!isRemote) {
+    function hydrateFromLocalStorage() {
       // One-time hydration from localStorage: must run after mount since
       // localStorage isn't available during server rendering.
       const stored = loadConversations();
@@ -56,11 +62,24 @@ export default function Home() {
         setConversations([fresh]);
         setActiveId(fresh.id);
       }
+    }
+
+    if (!isRemote) {
+      hydrateFromLocalStorage();
       return;
     }
 
     (async () => {
       let remote = await fetchConversations();
+
+      if (remote === null) {
+        // Supabase is unreachable/unconfigured in this environment — the
+        // signed-in user still gets a fully working app, just local-only
+        // for this session, instead of a blank page.
+        setRemoteOk(false);
+        hydrateFromLocalStorage();
+        return;
+      }
 
       // One-time migration: a signed-in user with local-only history from
       // before they signed in gets it pushed up, then localStorage is
@@ -78,7 +97,8 @@ export default function Home() {
               });
             }
           }
-          remote = await fetchConversations();
+          const refetched = await fetchConversations();
+          remote = refetched ?? [];
           saveConversations([]);
         }
       }
@@ -86,6 +106,13 @@ export default function Home() {
       if (remote.length === 0) {
         const created = await createConversationRemote(DEFAULT_MODEL);
         if (created) remote = [created];
+      }
+
+      if (remote.length === 0) {
+        // Every remote write also failed — degrade rather than blank out.
+        setRemoteOk(false);
+        hydrateFromLocalStorage();
+        return;
       }
 
       setConversations(remote);
@@ -98,13 +125,13 @@ export default function Home() {
 
   function persist(next: Conversation[]) {
     setConversations(next);
-    if (!isRemote) saveConversations(next);
+    if (!useRemote) saveConversations(next);
   }
 
   function handleNewChat() {
     if (!conversations) return;
     setSidebarOpen(false);
-    if (isRemote) {
+    if (useRemote) {
       createConversationRemote(DEFAULT_MODEL).then((created) => {
         if (!created) return;
         persist([...conversations, created]);
@@ -120,7 +147,7 @@ export default function Home() {
 
   function handleSelect(id: string) {
     setActiveId(id);
-    if (!isRemote) saveActiveId(id);
+    if (!useRemote) saveActiveId(id);
     setSidebarOpen(false);
   }
 
@@ -129,7 +156,7 @@ export default function Home() {
     persist(
       conversations.map((c) => (c.id === activeId ? { ...c, model } : c))
     );
-    if (isRemote) patchConversationRemote(activeId, { model });
+    if (useRemote) patchConversationRemote(activeId, { model });
   }
 
   function handleRepoChange(repo: GithubRepoLink | undefined) {
@@ -139,7 +166,7 @@ export default function Home() {
         c.id === activeId ? { ...c, githubRepo: repo } : c
       )
     );
-    if (isRemote) patchConversationRemote(activeId, { githubRepo: repo });
+    if (useRemote) patchConversationRemote(activeId, { githubRepo: repo });
   }
 
   function handleMessagesUpdate(messages: UIMessage[]) {
@@ -160,7 +187,7 @@ export default function Home() {
         c.id === activeId ? { ...c, messages, title } : c
       )
     );
-    if (isRemote) patchConversationRemote(activeId, { messages, title });
+    if (useRemote) patchConversationRemote(activeId, { messages, title });
   }
 
   if (!conversations || !active) {

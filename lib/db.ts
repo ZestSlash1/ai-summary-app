@@ -4,9 +4,13 @@ import type { UIMessage } from "ai";
 /** Signed-in equivalents of lib/storage.ts, backed by Supabase via the
  * /api/conversations routes rather than localStorage. */
 
-export async function fetchConversations(): Promise<Conversation[]> {
+/** Returns null specifically on failure (Supabase unreachable/unconfigured
+ * in this environment) — distinct from a successful fetch that just found
+ * zero conversations — so callers can fall back to localStorage instead of
+ * silently ending up with no conversations at all. */
+export async function fetchConversations(): Promise<Conversation[] | null> {
   const res = await fetch("/api/conversations");
-  if (!res.ok) return [];
+  if (!res.ok) return null;
   return res.json();
 }
 
