@@ -160,8 +160,17 @@ export async function POST(request: Request) {
 
   const defaultModel = modelSource === 'omniroute' ? 'auto/best-coding' : 'minimax/minimax-m3';
 
+  let resolvedModel;
+  try {
+    resolvedModel = resolveModel(model || defaultModel, modelSource);
+  } catch (err) {
+    await Promise.all(mcpClients.map((client) => client?.close()));
+    const message = err instanceof Error ? err.message : 'Failed to resolve model.';
+    return new Response(message, { status: 502 });
+  }
+
   const result = streamText({
-    model: resolveModel(model || defaultModel, modelSource),
+    model: resolvedModel,
     system: systemPrompt,
     messages: await convertToModelMessages(messages),
     tools,

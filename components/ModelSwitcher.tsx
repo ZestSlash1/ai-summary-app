@@ -13,6 +13,7 @@ export function ModelSwitcher({
   onChange: (modelId: string) => void;
 }) {
   const [models, setModels] = useState<ModelOption[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -25,12 +26,22 @@ export function ModelSwitcher({
     let cancelled = false;
     const source = loadModelSource();
     fetch(`/api/models?source=${source}`)
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data: ModelOption[]) => {
-        if (!cancelled) setModels(data);
+      .then(async (res) => {
+        const body = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(body?.error || "Failed to load models.");
+        return body as ModelOption[];
       })
-      .catch(() => {
-        if (!cancelled) setModels([]);
+      .then((data) => {
+        if (!cancelled) {
+          setModels(data);
+          setLoadError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setModels([]);
+          setLoadError(err instanceof Error ? err.message : "Failed to load models.");
+        }
       });
     return () => {
       cancelled = true;
@@ -93,7 +104,9 @@ export function ModelSwitcher({
             <p className="px-3 py-2 text-sm text-nimbus-text-muted">Loading models…</p>
           )}
           {models?.length === 0 && (
-            <p className="px-3 py-2 text-sm text-nimbus-text-muted">Couldn&apos;t load models.</p>
+            <p className="px-3 py-2 text-sm text-nimbus-text-muted">
+              {loadError || "Couldn't load models."}
+            </p>
           )}
           {filtered?.length === 0 && models && models.length > 0 && (
             <p className="px-3 py-2 text-sm text-nimbus-text-muted">No matches.</p>

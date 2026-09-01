@@ -346,7 +346,7 @@ export function ChatPanel({
             role="alert"
             className="rounded-2xl border border-nimbus-border bg-nimbus-surface px-4 py-3 text-sm text-nimbus-text shadow-[var(--nimbus-shadow)]"
           >
-            Something went wrong. Try again.
+            {error.message?.trim() || "Something went wrong. Try again."}
           </div>
         )}
 
