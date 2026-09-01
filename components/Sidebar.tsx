@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { Conversation } from "@/lib/types";
 import { GithubAuthButton } from "@/components/GithubAuthButton";
 
@@ -45,10 +46,10 @@ export function Sidebar({
             key={c.id}
             type="button"
             onClick={() => onSelect(c.id)}
-            className={`truncate rounded-xl px-3 py-2 text-left text-sm transition-colors ${
+            className={`truncate rounded-xl border-l-2 px-3 py-2 text-left text-sm transition-colors ${
               c.id === activeId
-                ? "bg-nimbus-surface font-medium text-nimbus-text shadow-[var(--nimbus-shadow)]"
-                : "text-nimbus-text-muted hover:bg-nimbus-surface/60"
+                ? "border-nimbus-accent bg-nimbus-surface font-medium text-nimbus-text shadow-[var(--nimbus-shadow)]"
+                : "border-transparent text-nimbus-text-muted hover:bg-nimbus-surface/60"
             }`}
           >
             {c.title}
@@ -56,7 +57,26 @@ export function Sidebar({
         ))}
       </div>
 
-      <GithubAuthButton />
+      <div className="flex items-center gap-2">
+        <div className="flex-1">
+          <GithubAuthButton />
+        </div>
+        <Link
+          href="/settings"
+          aria-label="Settings"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-nimbus-border bg-nimbus-surface text-nimbus-text-muted shadow-[var(--nimbus-shadow)] transition-colors hover:text-nimbus-text"
+        >
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+            <circle cx="7.5" cy="7.5" r="2" stroke="currentColor" strokeWidth="1.3" />
+            <path
+              d="M7.5 1.5v1.6M7.5 12v1.5M13.5 7.5H12M3 7.5H1.5M11.6 3.4l-1.1 1.1M4.5 10.5l-1.1 1.1M11.6 11.6l-1.1-1.1M4.5 4.5 3.4 3.4"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinecap="round"
+            />
+          </svg>
+        </Link>
+      </div>
     </aside>
   );
 }

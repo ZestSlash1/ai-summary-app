@@ -10,6 +10,7 @@ import { RepoConnect } from "./RepoConnect";
 import { McpConnectors } from "./McpConnectors";
 import { SkillPrompt } from "./SkillPrompt";
 import { MessageText } from "./CodeBlock";
+import { ThinkingIndicator } from "./ThinkingIndicator";
 import { Mascot } from "./Mascot";
 import { extractPushableFiles } from "@/lib/codeBlocks";
 import type { McpConnector } from "@/lib/mcp";
@@ -239,13 +240,7 @@ export function ChatPanel({
               </div>
             ))}
 
-            {isThinking && (
-              <div className="flex items-center gap-1.5 self-start rounded-[var(--nimbus-radius-card)] rounded-bl-lg border border-nimbus-border bg-nimbus-surface px-4 py-3 shadow-[var(--nimbus-shadow)]">
-                <span className="nimbus-dot h-1.5 w-1.5 rounded-full bg-nimbus-text-muted [animation-delay:0ms]" />
-                <span className="nimbus-dot h-1.5 w-1.5 rounded-full bg-nimbus-text-muted [animation-delay:150ms]" />
-                <span className="nimbus-dot h-1.5 w-1.5 rounded-full bg-nimbus-text-muted [animation-delay:300ms]" />
-              </div>
-            )}
+            {isThinking && <ThinkingIndicator />}
 
             <div ref={bottomRef} />
           </div>
@@ -309,7 +304,7 @@ export function ChatPanel({
           <button
             type="submit"
             disabled={isStreaming || !input.trim()}
-            className="flex items-center justify-center rounded-[var(--nimbus-radius-pill)] bg-nimbus-accent px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center justify-center rounded-[var(--nimbus-radius-pill)] bg-nimbus-accent px-5 py-2.5 text-sm font-medium text-white shadow-[var(--nimbus-glow)] transition-[opacity,box-shadow] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
           >
             Send
           </button>

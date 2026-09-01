@@ -15,6 +15,43 @@
   --nimbus-radius-pill: 999px;
   --nimbus-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
   --nimbus-shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.05), 0 16px 40px rgba(0, 0, 0, 0.09);
+  --nimbus-glow: 0 0 0 rgba(59, 130, 246, 0);
+}
+
+/* OLED dark: true black canvas, near-black surfaces separated by hairline
+   borders (a shadow reads as nothing on #000, so separation + a faint
+   accent glow do the work instead). Applies when the user explicitly picks
+   dark, or follows the system when they haven't picked at all. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --nimbus-bg: #000000;
+    --nimbus-surface: #0a0a0a;
+    --nimbus-border: #1c1c1c;
+    --nimbus-text: #f2f2f0;
+    --nimbus-text-muted: #8c8c87;
+    --nimbus-accent: #4c8dff;
+    --nimbus-accent-soft: rgba(76, 141, 255, 0.14);
+    --nimbus-free: #22d9a0;
+    --nimbus-free-soft: rgba(34, 217, 160, 0.14);
+    --nimbus-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 8px 20px rgba(0, 0, 0, 0.6);
+    --nimbus-shadow-lift: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 16px 40px rgba(0, 0, 0, 0.75);
+    --nimbus-glow: 0 0 24px rgba(76, 141, 255, 0.25);
+  }
+}
+
+:root[data-theme="dark"] {
+  --nimbus-bg: #000000;
+  --nimbus-surface: #0a0a0a;
+  --nimbus-border: #1c1c1c;
+  --nimbus-text: #f2f2f0;
+  --nimbus-text-muted: #8c8c87;
+  --nimbus-accent: #4c8dff;
+  --nimbus-accent-soft: rgba(76, 141, 255, 0.14);
+  --nimbus-free: #22d9a0;
+  --nimbus-free-soft: rgba(34, 217, 160, 0.14);
+  --nimbus-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 8px 20px rgba(0, 0, 0, 0.6);
+  --nimbus-shadow-lift: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 16px 40px rgba(0, 0, 0, 0.75);
+  --nimbus-glow: 0 0 24px rgba(76, 141, 255, 0.25);
 }
 
 @theme inline {
@@ -34,6 +71,7 @@ body {
   background: var(--nimbus-bg);
   color: var(--nimbus-text);
   font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 @keyframes nimbus-pulse {
@@ -51,4 +89,69 @@ body {
 
 .nimbus-dot {
   animation: nimbus-pulse 1.1s ease-in-out infinite;
+}
+
+/* Thinking indicator: a slowly rotating conic-gradient ring around the
+   mascot orb, plus a shimmering sweep across the label text. */
+@keyframes nimbus-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes nimbus-breathe {
+  0%,
+  100% {
+    transform: scale(0.92);
+  }
+  50% {
+    transform: scale(1);
+  }
+}
+
+@keyframes nimbus-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.nimbus-thinking-ring {
+  animation: nimbus-orbit 2.2s linear infinite;
+  background: conic-gradient(
+    from 0deg,
+    var(--nimbus-accent) 0deg,
+    transparent 100deg,
+    transparent 260deg,
+    var(--nimbus-free) 360deg
+  );
+}
+
+.nimbus-thinking-core {
+  animation: nimbus-breathe 1.8s ease-in-out infinite;
+}
+
+.nimbus-thinking-label {
+  background: linear-gradient(
+    90deg,
+    var(--nimbus-text-muted) 40%,
+    var(--nimbus-text) 50%,
+    var(--nimbus-text-muted) 60%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: nimbus-shimmer 2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nimbus-dot,
+  .nimbus-thinking-ring,
+  .nimbus-thinking-core,
+  .nimbus-thinking-label {
+    animation: none;
+  }
 }

@@ -14,10 +14,10 @@ export function GithubAuthButton() {
       <button
         type="button"
         onClick={() => signIn("github")}
-        className="flex items-center justify-center gap-2 rounded-2xl border border-nimbus-border bg-nimbus-surface px-4 py-2.5 text-sm font-medium text-nimbus-text shadow-[var(--nimbus-shadow)] transition-colors hover:border-nimbus-accent/40"
+        className="flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl border border-nimbus-border bg-nimbus-surface px-3 py-2.5 text-sm font-medium text-nimbus-text shadow-[var(--nimbus-shadow)] transition-colors hover:border-nimbus-accent/40"
       >
-        <GithubMark className="h-4 w-4" />
-        Sign in with GitHub
+        <GithubMark className="h-4 w-4 shrink-0" />
+        Sign in
       </button>
     );
   }

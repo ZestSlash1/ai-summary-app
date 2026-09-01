@@ -3,6 +3,7 @@ import { DEFAULT_MODEL } from "./types";
 
 const CONVERSATIONS_KEY = "nimbus-conversations";
 const ACTIVE_ID_KEY = "nimbus-active-conversation";
+const DEFAULT_MODEL_KEY = "nimbus-default-model";
 
 export function loadConversations(): Conversation[] {
   if (typeof window === "undefined") return [];
@@ -38,7 +39,7 @@ export function saveActiveId(id: string) {
   window.localStorage.setItem(ACTIVE_ID_KEY, id);
 }
 
-export function createConversation(model: string = DEFAULT_MODEL): Conversation {
+export function createConversation(model: string = loadDefaultModel()): Conversation {
   return {
     id: crypto.randomUUID(),
     title: "New chat",
@@ -46,6 +47,16 @@ export function createConversation(model: string = DEFAULT_MODEL): Conversation 
     model,
     createdAt: Date.now(),
   };
+}
+
+export function loadDefaultModel(): string {
+  if (typeof window === "undefined") return DEFAULT_MODEL;
+  return window.localStorage.getItem(DEFAULT_MODEL_KEY) || DEFAULT_MODEL;
+}
+
+export function saveDefaultModel(model: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(DEFAULT_MODEL_KEY, model);
 }
 
 export function titleFromMessage(text: string): string {
