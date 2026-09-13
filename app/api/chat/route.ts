@@ -59,7 +59,11 @@ function resolveModel(model: string, source: ModelSource | undefined) {
     if (!baseURL) {
       throw new Error('OmniRoute is not configured (OMNIROUTE_BASE_URL missing).');
     }
-    omniroute = createOpenAICompatible({ name: 'omniroute', baseURL });
+    omniroute = createOpenAICompatible({
+      name: 'omniroute',
+      baseURL,
+      apiKey: process.env.OMNIROUTE_API_KEY,
+    });
   }
   return omniroute(model);
 }

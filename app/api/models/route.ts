@@ -41,7 +41,12 @@ async function fetchOmniRouteModels(): Promise<ModelOption[]> {
   const baseURL = process.env.OMNIROUTE_BASE_URL;
   if (!baseURL) throw new Error("OmniRoute is not configured.");
 
-  const res = await fetch(`${baseURL}/models`, { next: { revalidate: 600 } });
+  const res = await fetch(`${baseURL}/models`, {
+    headers: process.env.OMNIROUTE_API_KEY
+      ? { Authorization: `Bearer ${process.env.OMNIROUTE_API_KEY}` }
+      : undefined,
+    next: { revalidate: 600 },
+  });
   if (!res.ok) throw new Error("Failed to fetch models from OmniRoute.");
 
   const body = (await res.json()) as { data: OmniRouteModel[] };
