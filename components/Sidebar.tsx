@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { Conversation } from "@/lib/types";
 import { AccountMenu } from "@/components/AccountMenu";
-import { ThemeToggleIcon } from "@/components/ThemeToggleIcon";
+import { groupConversationsByDay } from "@/lib/dateGroups";
 
 export function Sidebar({
   conversations,
@@ -21,6 +21,7 @@ export function Sidebar({
   onClose: () => void;
 }) {
   const sorted = [...conversations].sort((a, b) => b.createdAt - a.createdAt);
+  const groups = groupConversationsByDay(sorted);
 
   return (
     <>
@@ -33,7 +34,7 @@ export function Sidebar({
         }`}
       />
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex h-full w-72 shrink-0 flex-col gap-4 border-r border-nimbus-border bg-nimbus-bg px-4 py-6 transition-transform duration-300 ease-[var(--nimbus-ease)] sm:w-64 md:static md:z-auto md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-full w-72 shrink-0 flex-col gap-4 border-r border-nimbus-border bg-nimbus-surface px-4 py-6 transition-transform duration-300 ease-[var(--nimbus-ease)] sm:w-64 md:static md:z-auto md:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -41,7 +42,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={onNewChat}
-            className="group flex flex-1 items-center gap-2 rounded-2xl border border-nimbus-border bg-nimbus-surface py-2 pl-2 pr-4 text-sm font-medium text-nimbus-text shadow-[var(--nimbus-shadow)] transition-[transform,border-color] duration-300 ease-[var(--nimbus-ease)] hover:-translate-y-0.5 hover:border-nimbus-accent/40 active:translate-y-0 active:scale-[0.98]"
+            className="group flex flex-1 items-center gap-2 rounded-2xl border border-nimbus-border bg-nimbus-bg py-2 pl-2 pr-4 text-sm font-medium text-nimbus-text transition-[transform,border-color] duration-300 ease-[var(--nimbus-ease)] hover:-translate-y-0.5 hover:border-nimbus-accent/40 active:translate-y-0 active:scale-[0.98]"
           >
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-nimbus-accent-soft text-nimbus-accent transition-transform duration-300 ease-[var(--nimbus-ease)] group-hover:rotate-90">
               <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
@@ -59,7 +60,7 @@ export function Sidebar({
             type="button"
             onClick={onClose}
             aria-label="Close menu"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-nimbus-border bg-nimbus-surface text-nimbus-text-muted shadow-[var(--nimbus-shadow)] transition-colors hover:text-nimbus-text md:hidden"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-nimbus-border bg-nimbus-bg text-nimbus-text-muted transition-colors hover:text-nimbus-text md:hidden"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path
@@ -72,25 +73,32 @@ export function Sidebar({
           </button>
         </div>
 
-        <div className="flex flex-1 flex-col gap-1 overflow-y-auto">
+        <div className="flex flex-1 flex-col gap-3 overflow-y-auto">
           {sorted.length === 0 && (
             <p className="px-2 py-2 text-xs text-nimbus-text-muted">
               No conversations yet.
             </p>
           )}
-          {sorted.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => onSelect(c.id)}
-              className={`truncate rounded-xl border-l-2 px-3 py-2 text-left text-sm transition-[color,background-color,border-color] duration-300 ease-[var(--nimbus-ease)] ${
-                c.id === activeId
-                  ? "border-nimbus-accent bg-nimbus-surface font-medium text-nimbus-text shadow-[var(--nimbus-shadow)]"
-                  : "border-transparent text-nimbus-text-muted hover:bg-nimbus-surface/60"
-              }`}
-            >
-              {c.title}
-            </button>
+          {groups.map((group) => (
+            <div key={group.label} className="flex flex-col gap-1">
+              <p className="px-3 text-[10px] font-semibold uppercase tracking-wide text-nimbus-text-muted">
+                {group.label}
+              </p>
+              {group.items.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => onSelect(c.id)}
+                  className={`truncate rounded-xl border-l-2 px-3 py-2 text-left text-sm transition-[color,background-color,border-color] duration-300 ease-[var(--nimbus-ease)] ${
+                    c.id === activeId
+                      ? "border-nimbus-accent bg-nimbus-bg font-medium text-nimbus-text"
+                      : "border-transparent text-nimbus-text-muted hover:bg-nimbus-bg/70"
+                  }`}
+                >
+                  {c.title}
+                </button>
+              ))}
+            </div>
           ))}
         </div>
 
@@ -98,11 +106,10 @@ export function Sidebar({
           <div className="min-w-0 flex-1">
             <AccountMenu conversations={conversations} />
           </div>
-          <ThemeToggleIcon />
           <Link
             href="/settings"
             aria-label="Settings"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-nimbus-border bg-nimbus-surface text-nimbus-text-muted shadow-[var(--nimbus-shadow)] transition-colors hover:text-nimbus-text"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-nimbus-border bg-nimbus-bg text-nimbus-text-muted transition-colors hover:text-nimbus-text"
           >
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
               <circle cx="7.5" cy="7.5" r="2" stroke="currentColor" strokeWidth="1.3" />

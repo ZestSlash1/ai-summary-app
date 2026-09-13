@@ -1,53 +1,32 @@
 @import "tailwindcss";
 
 :root {
-  --nimbus-bg: #f7f6f2;
+  --nimbus-bg: #eef1fb;
   --nimbus-surface: #ffffff;
-  --nimbus-border: #ecEAE4;
-  --nimbus-text: #1a1a18;
-  --nimbus-text-muted: #6b6a64;
-  --nimbus-accent: #3b82f6;
-  --nimbus-accent-soft: #eaf2fe;
-  --nimbus-free: #10b981;
-  --nimbus-free-soft: #e8f9f1;
+  --nimbus-border: #e6e4f4;
+  --nimbus-text: #1a1a2e;
+  --nimbus-text-muted: #6b6a80;
+  --nimbus-accent: #5b57f5;
+  --nimbus-accent-soft: #ecebff;
+  --nimbus-free: #16a37a;
+  --nimbus-free-soft: #e4f7f0;
 
-  --nimbus-radius-card: 24px;
+  --nimbus-radius-card: 20px;
   --nimbus-radius-pill: 999px;
   --nimbus-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
   --nimbus-shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.05), 0 16px 40px rgba(0, 0, 0, 0.09);
-  --nimbus-glow: 0 0 0 rgba(59, 130, 246, 0);
+  --nimbus-glow: 0 0 0 rgba(91, 87, 245, 0);
   --nimbus-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.6);
   --nimbus-shell-bg: rgba(0, 0, 0, 0.03);
   --nimbus-ease: cubic-bezier(0.32, 0.72, 0, 1);
-  --nimbus-glow-a: rgba(76, 141, 255, 0.05);
-  --nimbus-glow-b: rgba(34, 217, 160, 0.04);
+  --nimbus-glow-a: rgba(91, 87, 245, 0.06);
+  --nimbus-glow-b: rgba(91, 87, 245, 0.045);
 }
 
-/* OLED dark: true black canvas, near-black surfaces separated by hairline
-   borders (a shadow reads as nothing on #000, so separation + a faint
-   accent glow do the work instead). Applies when the user explicitly picks
-   dark, or follows the system when they haven't picked at all. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --nimbus-bg: #000000;
-    --nimbus-surface: #0a0a0a;
-    --nimbus-border: #1c1c1c;
-    --nimbus-text: #f2f2f0;
-    --nimbus-text-muted: #8c8c87;
-    --nimbus-accent: #4c8dff;
-    --nimbus-accent-soft: rgba(76, 141, 255, 0.14);
-    --nimbus-free: #22d9a0;
-    --nimbus-free-soft: rgba(34, 217, 160, 0.14);
-    --nimbus-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 8px 20px rgba(0, 0, 0, 0.6);
-    --nimbus-shadow-lift: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 16px 40px rgba(0, 0, 0, 0.75);
-    --nimbus-glow: 0 0 24px rgba(76, 141, 255, 0.25);
-    --nimbus-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    --nimbus-shell-bg: rgba(255, 255, 255, 0.03);
-    --nimbus-glow-a: rgba(76, 141, 255, 0.1);
-    --nimbus-glow-b: rgba(34, 217, 160, 0.07);
-  }
-}
-
+/* OLED dark: kept as inert scaffolding for when dark mode comes back
+   (see stratify-redesign-task.md). Dark mode is paused — nothing sets
+   data-theme="dark" right now, and this no longer auto-applies from
+   prefers-color-scheme. */
 :root[data-theme="dark"] {
   --nimbus-bg: #000000;
   --nimbus-surface: #0a0a0a;
@@ -65,6 +44,7 @@
   --nimbus-shell-bg: rgba(255, 255, 255, 0.03);
   --nimbus-glow-a: rgba(76, 141, 255, 0.1);
   --nimbus-glow-b: rgba(34, 217, 160, 0.07);
+  --gemini-blend: screen;
 }
 
 @theme inline {
@@ -106,6 +86,7 @@ body::before {
   z-index: 1;
   display: flex;
   flex: 1;
+  min-width: 0;
 }
 
 /* Custom scrollbar: thin, matches the surface palette instead of the OS
@@ -175,67 +156,27 @@ body::before {
   animation: nimbus-pulse 1.1s ease-in-out infinite;
 }
 
-/* Thinking indicator: a slowly rotating conic-gradient ring around the
-   mascot orb, plus a shimmering sweep across the label text. */
-@keyframes nimbus-orbit {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes nimbus-breathe {
+/* Thinking indicator: a small, understated ticking dot next to a plain
+   "Thinking for Ns…" line — no full-bleed background effect. */
+@keyframes nimbus-tick {
   0%,
   100% {
-    transform: scale(0.92);
+    opacity: 0.35;
+    transform: scale(0.85);
   }
   50% {
+    opacity: 1;
     transform: scale(1);
   }
 }
 
-@keyframes nimbus-shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
-.nimbus-thinking-ring {
-  animation: nimbus-orbit 2.2s linear infinite;
-  background: conic-gradient(
-    from 0deg,
-    var(--nimbus-accent) 0deg,
-    transparent 100deg,
-    transparent 260deg,
-    var(--nimbus-free) 360deg
-  );
-}
-
-.nimbus-thinking-core {
-  animation: nimbus-breathe 1.8s ease-in-out infinite;
-}
-
-.nimbus-thinking-label {
-  background: linear-gradient(
-    90deg,
-    var(--nimbus-text-muted) 40%,
-    var(--nimbus-text) 50%,
-    var(--nimbus-text-muted) 60%
-  );
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: nimbus-shimmer 2s linear infinite;
+.nimbus-tick-dot {
+  animation: nimbus-tick 1.4s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .nimbus-dot,
-  .nimbus-thinking-ring,
-  .nimbus-thinking-core,
-  .nimbus-thinking-label {
+  .nimbus-tick-dot {
     animation: none;
   }
 }

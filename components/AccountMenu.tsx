@@ -21,7 +21,7 @@ export function AccountMenu({ conversations }: { conversations: Conversation[] }
       <button
         type="button"
         onClick={() => signIn("github")}
-        className="flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl border border-nimbus-border bg-nimbus-surface px-3 py-2.5 text-sm font-medium text-nimbus-text shadow-[var(--nimbus-shadow)] transition-[transform,border-color] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-accent/40 active:scale-[0.97]"
+        className="flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl border border-nimbus-border bg-nimbus-bg px-3 py-2.5 text-sm font-medium text-nimbus-text transition-[transform,border-color] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-accent/40 active:scale-[0.97]"
       >
         <GithubMark className="h-4 w-4 shrink-0" />
         Sign in
@@ -40,7 +40,7 @@ export function AccountMenu({ conversations }: { conversations: Conversation[] }
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 rounded-2xl border border-nimbus-border bg-nimbus-surface px-2 py-2 shadow-[var(--nimbus-shadow)] transition-[border-color] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-accent/40"
+        className="flex w-full items-center gap-2 rounded-2xl border border-nimbus-border bg-nimbus-bg px-2 py-2 transition-[border-color] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-accent/40"
       >
         {session.user.image ? (
           // eslint-disable-next-line @next/next/no-img-element

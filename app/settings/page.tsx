@@ -6,7 +6,6 @@ import { signIn, signOut, useSession } from "next-auth/react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ModelSwitcher } from "@/components/ModelSwitcher";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { ModelSourceToggle } from "@/components/ModelSourceToggle";
 import { McpConnectorsList } from "@/components/McpConnectorsList";
 import { DEFAULT_MODEL } from "@/lib/types";
@@ -158,8 +157,12 @@ export default function SettingsPage() {
         )}
       </Section>
 
-      <Section title="Appearance" description="OLED-friendly dark theme, or follow your system.">
-        <ThemeToggle />
+      <Section title="Appearance">
+        <Card>
+          <p className="text-sm text-nimbus-text-muted">
+            Dark mode is taking a break while we redesign it — it&apos;ll be back.
+          </p>
+        </Card>
       </Section>
 
       <Section

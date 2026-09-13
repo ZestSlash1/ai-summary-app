@@ -230,6 +230,10 @@ export default function Home() {
         onMessagesUpdate={handleMessagesUpdate}
         githubRepo={active.githubRepo}
         onRepoChange={handleRepoChange}
+        conversations={conversations}
+        userName={session?.user?.name}
+        onSelectConversation={handleSelect}
+        onNewChat={handleNewChat}
       />
     </div>
   );

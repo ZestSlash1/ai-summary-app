@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { Providers } from "@/components/Providers";
-import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 const geist = Geist({
@@ -32,9 +31,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geist.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-      </head>
       <body className="min-h-full flex bg-nimbus-bg text-nimbus-text">
         <div id="nimbus-root">
           <Providers>{children}</Providers>

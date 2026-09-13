@@ -12,20 +12,13 @@ import { SkillPrompt } from "./SkillPrompt";
 import { MessageText } from "./CodeBlock";
 import { MessageActions } from "./MessageActions";
 import { ThinkingIndicator } from "./ThinkingIndicator";
-import { ThinkingFieldBackground } from "./ThinkingFieldBackground";
-import { Mascot } from "./Mascot";
+import { HomeDashboard } from "./HomeDashboard";
 import { extractPushableFiles } from "@/lib/codeBlocks";
 import type { McpConnector } from "@/lib/mcp";
-import type { GithubRepoLink } from "@/lib/types";
+import type { Conversation, GithubRepoLink } from "@/lib/types";
 import { loadModelSource } from "@/lib/storage";
 
 gsap.registerPlugin(useGSAP);
-
-const SUGGESTIONS = [
-  "What can you help me with?",
-  "What time is it right now?",
-  "Calculate 128 * 47 for me",
-];
 
 function textOf(message: UIMessage): string {
   return message.parts
@@ -42,6 +35,10 @@ export function ChatPanel({
   onMessagesUpdate,
   githubRepo,
   onRepoChange,
+  conversations,
+  userName,
+  onSelectConversation,
+  onNewChat,
 }: {
   conversationId: string;
   initialMessages: UIMessage[];
@@ -50,6 +47,10 @@ export function ChatPanel({
   onMessagesUpdate: (messages: UIMessage[]) => void;
   githubRepo?: GithubRepoLink;
   onRepoChange: (repo: GithubRepoLink | undefined) => void;
+  conversations: Conversation[];
+  userName?: string | null;
+  onSelectConversation: (id: string) => void;
+  onNewChat: () => void;
 }) {
   const modelRef = useRef(model);
   useEffect(() => {
@@ -253,28 +254,22 @@ export function ChatPanel({
       ref={containerRef}
       className="relative flex flex-1 flex-col items-center overflow-hidden px-4 pb-4 pt-20 sm:px-6 sm:pb-8 sm:pt-12 md:pt-8"
     >
-      <ThinkingFieldBackground active={isThinking} />
-      <div className="relative z-10 flex w-full max-w-2xl flex-1 flex-col gap-6 overflow-hidden">
+      <div
+        className={`relative z-10 flex w-full flex-1 flex-col gap-6 overflow-hidden ${
+          messages.length === 0 ? "max-w-3xl" : "max-w-2xl"
+        }`}
+      >
         {messages.length === 0 ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-6 text-center">
-            <Mascot className="h-24 w-24" />
-            <h1 className="text-2xl font-medium leading-snug text-nimbus-text sm:text-3xl">
-              What can I <span className="font-semibold">help</span> you{" "}
-              <span className="font-semibold">figure out</span> today?
-            </h1>
-            <div className="flex flex-wrap justify-center gap-2">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => handleSuggestion(s)}
-                  className="rounded-[var(--nimbus-radius-pill)] border border-nimbus-border bg-nimbus-surface px-4 py-2 text-sm text-nimbus-text-muted shadow-[var(--nimbus-shadow)] transition-[transform,color,border-color] duration-300 ease-[var(--nimbus-ease)] hover:-translate-y-0.5 hover:border-nimbus-accent/40 hover:text-nimbus-text active:translate-y-0 active:scale-[0.98]"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
+          <HomeDashboard
+            userName={userName}
+            conversations={conversations}
+            activeConversationId={conversationId}
+            githubRepo={githubRepo}
+            onSelectConversation={onSelectConversation}
+            onNewChat={onNewChat}
+            onConnectRepo={() => setRepoPromptOpen(true)}
+            onSuggestion={handleSuggestion}
+          />
         ) : (
           <div
             ref={scrollRef}
