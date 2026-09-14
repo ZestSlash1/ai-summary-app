@@ -294,7 +294,13 @@ export function ChatPanel({
                 >
                   {message.parts.map((part, i) => {
                     if (part.type === "text") {
-                      return <MessageText key={i} text={part.text} />;
+                      const isLiveAssistantText =
+                        isStreaming &&
+                        message.role === "assistant" &&
+                        message.id === lastMessage?.id;
+                      return (
+                        <MessageText key={i} text={part.text} streaming={isLiveAssistantText} />
+                      );
                     }
                     if (part.type.startsWith("tool-")) {
                       return (

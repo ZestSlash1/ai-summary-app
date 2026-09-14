@@ -75,8 +75,8 @@ export function TodoList() {
 
   useEffect(() => {
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-      setCurrent(n);
-      return;
+      const id = setTimeout(() => setCurrent(n), 0);
+      return () => clearTimeout(id);
     }
     const timers = [setTimeout(() => setCurrent(0), START_DELAY)];
     for (let i = 0; i < n; i++) {

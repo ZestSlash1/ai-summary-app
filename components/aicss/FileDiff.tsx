@@ -1,6 +1,8 @@
 import styles from "./FileDiff.module.css";
 
-const ROWS = [
+type DiffRow = { old: number | null; cur: number | null; type: string; text: string };
+
+const ROWS: DiffRow[] = [
   { old: 12, cur: 12, type: "ctx", text: "export function getToken() {" },
   { old: 13, cur: null, type: "del", text: "  return localStorage.token;" },
   { old: null, cur: 13, type: "add", text: '  const t = cookies.get("session");' },
@@ -9,7 +11,7 @@ const ROWS = [
   { old: 14, cur: 16, type: "ctx", text: "}" },
 ];
 
-export function FileDiff({ file = "src/auth.ts", rows = ROWS }) {
+export function FileDiff({ file = "src/auth.ts", rows = ROWS }: { file?: string; rows?: DiffRow[] }) {
   const added = rows.filter((r) => r.type === "add").length;
   const removed = rows.filter((r) => r.type === "del").length;
   return (
