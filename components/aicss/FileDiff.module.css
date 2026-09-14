@@ -1,0 +1,45 @@
+.diff { border-radius: 12px; background: var(--nimbus-bg); box-shadow: var(--nimbus-shadow); padding: 12px 16px 16px; overflow: hidden; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.diffHead {
+  display: flex; align-items: center; gap: 8px;
+  margin: -12px -16px 0; padding: 10px 12px 10px 16px;
+  background: transparent; border-bottom: 1px solid var(--nimbus-border); font-size: 12.5px;
+}
+.diffFileWrap { display: inline-flex; align-items: center; gap: 7px; }
+.diffIcon { display: block; width: 15px; height: 15px; color: var(--nimbus-text-muted); flex: none; }
+.diffFile { color: var(--nimbus-text); line-height: 1; }
+.diffStat { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-size: 12px; line-height: 1; }
+.diffStat .add { color: var(--nimbus-free); }
+.diffStat .del { color: #dc2626; }
+.diffBody {
+  position: relative;
+  margin: 0 -16px -16px; overflow-x: auto; overflow-y: hidden;
+  padding: 4px 0; font-size: 12.5px; line-height: 20px;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.diffBody::-webkit-scrollbar { display: none; }
+.diffLines { position: relative; width: max-content; min-width: 100%; }
+/* full-height gutter divider at the line-number edge (32px + 32px).
+   Lives on the inner track so it stays aligned while the body scrolls. */
+.diffLines::before { content: ""; position: absolute; top: 0; bottom: 0; left: 64px; width: 0.5px; background: var(--nimbus-border); z-index: 1; pointer-events: none; }
+.diffRow {
+  position: relative;
+  display: grid; grid-template-columns: 32px 32px 18px 1fr; align-items: stretch;
+}
+.diffRow .ln, .diffRow .sign { user-select: none; color: var(--nimbus-text-muted); font-size: 11px; }
+.diffRow .ln { text-align: right; padding: 0 7px; }
+.diffRow .sign { text-align: center; }
+.diffRow code { white-space: pre; padding: 0 12px 0 8px; color: var(--nimbus-text-muted); }
+/* left accent bar: solid green for additions, red hatch for deletions */
+.diffRow.add::before, .diffRow.del::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 3px;
+}
+.diffRow.add::before { background: var(--nimbus-free); }
+.diffRow.del::before {
+  background: repeating-linear-gradient(45deg, #dc2626 0, #dc2626 1.5px, transparent 1.5px, transparent 3px);
+}
+.diffRow.add { background: var(--nimbus-free-soft); }
+.diffRow.add .sign, .diffRow.add .new { color: var(--nimbus-free); }
+.diffRow.add code { color: var(--nimbus-text); }
+.diffRow.del { background: rgba(220, 38, 38, 0.08); }
+.diffRow.del .sign, .diffRow.del .old { color: #dc2626; }
+.diffRow.del code { color: var(--nimbus-text); }
