@@ -1,5 +1,5 @@
 import type { Conversation } from "./types";
-import { DEFAULT_MODEL } from "./types";
+import { FALLBACK_MODEL } from "./types";
 
 const CONVERSATIONS_KEY = "nimbus-conversations";
 const ACTIVE_ID_KEY = "nimbus-active-conversation";
@@ -51,8 +51,8 @@ export function createConversation(model: string = loadDefaultModel()): Conversa
 }
 
 export function loadDefaultModel(): string {
-  if (typeof window === "undefined") return DEFAULT_MODEL;
-  return window.localStorage.getItem(DEFAULT_MODEL_KEY) || DEFAULT_MODEL;
+  if (typeof window === "undefined") return FALLBACK_MODEL;
+  return window.localStorage.getItem(DEFAULT_MODEL_KEY) || FALLBACK_MODEL;
 }
 
 export function saveDefaultModel(model: string) {

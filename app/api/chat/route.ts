@@ -13,6 +13,8 @@ import { after } from 'next/server';
 import { auth } from '@/auth';
 import { retrieveMemory } from '@/lib/memory';
 import { getUserSkills, logSignalAndMaybePropose, messageMatchesKnownSkill } from '@/lib/skillDiscovery';
+import { fetchGatewayModels, fetchOmniRouteModels } from '@/lib/modelCatalog';
+import { FALLBACK_MODEL } from '@/lib/types';
 
 export const maxDuration = 30;
 
@@ -162,10 +164,25 @@ export async function POST(request: Request) {
     }
   }
 
-  const defaultModel = modelSource === 'omniroute' ? 'auto/best-coding' : 'minimax/minimax-m3';
+  // This only fires when the client sent no model at all — every normal
+  // new-conversation path resolves a real one up front. Kept as a genuine
+  // last resort: pick whatever's actually free in the live catalog instead
+  // of a hardcoded id that can silently rot.
+  async function resolveDefaultModel(): Promise<string> {
+    try {
+      const models =
+        modelSource === 'omniroute'
+          ? await fetchOmniRouteModels()
+          : await fetchGatewayModels();
+      const free = models.find((m) => m.free);
+      return (free ?? models[0])?.id ?? FALLBACK_MODEL;
+    } catch {
+      return modelSource === 'omniroute' ? 'auto/best-free' : FALLBACK_MODEL;
+    }
+  }
 
   const result = streamText({
-    model: resolveModel(model || defaultModel, modelSource),
+    model: resolveModel(model || (await resolveDefaultModel()), modelSource),
     system: systemPrompt,
     messages: await convertToModelMessages(messages),
     tools,

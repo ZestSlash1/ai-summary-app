@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { supabase } from "@/lib/supabase";
-import { DEFAULT_MODEL } from "@/lib/types";
+import { FALLBACK_MODEL } from "@/lib/types";
 
 export async function GET() {
   const session = await auth();
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     .insert({
       user_id: session.githubUserId,
       title: "New chat",
-      model: body.model || DEFAULT_MODEL,
+      model: body.model || FALLBACK_MODEL,
       messages: [],
     })
     .select()

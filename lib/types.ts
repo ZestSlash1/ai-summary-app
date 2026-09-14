@@ -21,4 +21,7 @@ export type Conversation = {
   githubRepo?: GithubRepoLink;
 };
 
-export const DEFAULT_MODEL = "minimax/minimax-m3";
+// Absolute last-resort fallback, used only when /api/models itself is
+// unreachable — new conversations otherwise get a live source-aware default
+// from fetchDefaultModelForSource() in lib/models.ts.
+export const FALLBACK_MODEL = "minimax/minimax-m3";

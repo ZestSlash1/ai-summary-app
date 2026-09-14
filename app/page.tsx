@@ -6,15 +6,17 @@ import { useSession } from "next-auth/react";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatPanel } from "@/components/ChatPanel";
 import type { Conversation, GithubRepoLink } from "@/lib/types";
-import { DEFAULT_MODEL } from "@/lib/types";
+import { FALLBACK_MODEL } from "@/lib/types";
 import {
   createConversation,
   loadActiveId,
   loadConversations,
+  loadModelSource,
   saveActiveId,
   saveConversations,
   titleFromMessage,
 } from "@/lib/storage";
+import { fetchDefaultModelForSource } from "@/lib/models";
 import {
   createConversationRemote,
   fetchConversations,
@@ -45,7 +47,7 @@ export default function Home() {
     hydratedForRef.current = mode;
 
     /* eslint-disable react-hooks/set-state-in-effect */
-    function hydrateFromLocalStorage() {
+    async function hydrateFromLocalStorage() {
       // One-time hydration from localStorage: must run after mount since
       // localStorage isn't available during server rendering.
       const stored = loadConversations();
@@ -58,7 +60,8 @@ export default function Home() {
             : stored[0].id
         );
       } else {
-        const fresh = createConversation();
+        const model = await fetchDefaultModelForSource(loadModelSource());
+        const fresh = createConversation(model);
         setConversations([fresh]);
         setActiveId(fresh.id);
       }
@@ -104,7 +107,8 @@ export default function Home() {
       }
 
       if (remote.length === 0) {
-        const created = await createConversationRemote(DEFAULT_MODEL);
+        const model = await fetchDefaultModelForSource(loadModelSource());
+        const created = await createConversationRemote(model);
         if (created) remote = [created];
       }
 
@@ -128,18 +132,18 @@ export default function Home() {
     if (!useRemote) saveConversations(next);
   }
 
-  function handleNewChat() {
+  async function handleNewChat() {
     if (!conversations) return;
     setSidebarOpen(false);
+    const model = await fetchDefaultModelForSource(loadModelSource());
     if (useRemote) {
-      createConversationRemote(DEFAULT_MODEL).then((created) => {
-        if (!created) return;
-        persist([...conversations, created]);
-        setActiveId(created.id);
-      });
+      const created = await createConversationRemote(model);
+      if (!created) return;
+      persist([...conversations, created]);
+      setActiveId(created.id);
       return;
     }
-    const fresh = createConversation();
+    const fresh = createConversation(model);
     persist([...conversations, fresh]);
     setActiveId(fresh.id);
     saveActiveId(fresh.id);
@@ -225,7 +229,7 @@ export default function Home() {
         key={active.id}
         conversationId={active.id}
         initialMessages={active.messages}
-        model={active.model || DEFAULT_MODEL}
+        model={active.model || FALLBACK_MODEL}
         onModelChange={handleModelChange}
         onMessagesUpdate={handleMessagesUpdate}
         githubRepo={active.githubRepo}

@@ -8,7 +8,7 @@ import { useGSAP } from "@gsap/react";
 import { ModelSwitcher } from "@/components/ModelSwitcher";
 import { ModelSourceToggle } from "@/components/ModelSourceToggle";
 import { McpConnectorsList } from "@/components/McpConnectorsList";
-import { DEFAULT_MODEL } from "@/lib/types";
+import { FALLBACK_MODEL } from "@/lib/types";
 import { loadDefaultModel, saveDefaultModel, saveConversations } from "@/lib/storage";
 import type { Skill } from "@/lib/skills";
 
@@ -16,7 +16,7 @@ gsap.registerPlugin(useGSAP);
 
 export default function SettingsPage() {
   const { data: session, status } = useSession();
-  const [defaultModel, setDefaultModel] = useState(DEFAULT_MODEL);
+  const [defaultModel, setDefaultModel] = useState(FALLBACK_MODEL);
   const [cleared, setCleared] = useState(false);
   const [approvedSkills, setApprovedSkills] = useState<Skill[]>([]);
   const [proposedSkills, setProposedSkills] = useState<Skill[]>([]);
