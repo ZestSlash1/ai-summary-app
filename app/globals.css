@@ -260,6 +260,45 @@ body::before {
   }
 }
 
+/* Image edit card: a slow sheen over the placeholder while an edit runs, and a soft
+   fade when the finished image arrives. Both use transform and opacity only. */
+@keyframes nimbus-sheen {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes nimbus-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.nimbus-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--nimbus-shell-bg), transparent);
+  animation: nimbus-sheen 1.8s ease-in-out infinite;
+}
+
+.nimbus-fade-in {
+  animation: nimbus-fade-in 0.4s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nimbus-sheen::after,
+  .nimbus-fade-in {
+    animation: none;
+  }
+}
+
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);

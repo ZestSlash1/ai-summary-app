@@ -7,6 +7,7 @@ import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ModelSwitcher } from "@/components/ModelSwitcher";
 import { ModelSourceToggle } from "@/components/ModelSourceToggle";
+import { GpuStatusPanel } from "@/components/GpuStatus";
 import { McpConnectorsList } from "@/components/McpConnectorsList";
 import { FALLBACK_MODEL } from "@/lib/types";
 import { loadDefaultModel, saveDefaultModel, saveConversations } from "@/lib/storage";
@@ -170,6 +171,15 @@ export default function SettingsPage() {
         description="Where chat models come from — applies to every message app-wide."
       >
         <ModelSourceToggle />
+      </Section>
+
+      <Section
+        title="Home PC"
+        description="Bonsai and image editing run on the owner's PC through a private tunnel."
+      >
+        <Card>
+          <GpuStatusPanel />
+        </Card>
       </Section>
 
       <Section title="Default model" description="Used for every new conversation.">
