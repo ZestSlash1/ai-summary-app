@@ -6,7 +6,8 @@ import { loadModelSource, saveModelSource } from "@/lib/storage";
 
 const OPTIONS: { value: ModelSource; label: string }[] = [
   { value: "gateway", label: "AI Gateway" },
-  { value: "omniroute", label: "OmniRoute (self-hosted)" },
+  { value: "omniroute", label: "OmniRoute" },
+  { value: "bonsai", label: "Bonsai (Local)" },
 ];
 
 export function ModelSourceToggle() {

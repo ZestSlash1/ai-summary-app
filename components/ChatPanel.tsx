@@ -293,6 +293,26 @@ export function ChatPanel({
                   }
                 >
                   {message.parts.map((part, i) => {
+                    if (part.type === "reasoning") {
+                      const reasoningText =
+                        (part as { reasoning?: string; text?: string }).reasoning ||
+                        (part as { text?: string }).text ||
+                        "";
+                      if (!reasoningText.trim()) return null;
+                      return (
+                        <details
+                          key={i}
+                          className="my-2 rounded-lg border border-nimbus-border/60 bg-nimbus-bg/60 px-3 py-1.5 text-xs text-nimbus-text-muted"
+                        >
+                          <summary className="cursor-pointer select-none font-medium text-nimbus-text-muted transition-colors hover:text-nimbus-text">
+                            Thought process
+                          </summary>
+                          <div className="mt-1.5 whitespace-pre-wrap leading-relaxed opacity-90">
+                            {reasoningText}
+                          </div>
+                        </details>
+                      );
+                    }
                     if (part.type === "text") {
                       const isLiveAssistantText =
                         isStreaming &&
