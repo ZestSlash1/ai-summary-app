@@ -16,6 +16,7 @@ import { getUserSkills, logSignalAndMaybePropose, messageMatchesKnownSkill } fro
 import { fetchGatewayModels, fetchOmniRouteModels, fetchBonsaiModels } from '@/lib/modelCatalog';
 import { FALLBACK_MODEL } from '@/lib/types';
 import { safeEvaluate } from '@/lib/calc';
+import { canUseBonsai, bonsaiDenied } from '@/lib/access';
 
 export const maxDuration = 60;
 
@@ -111,6 +112,8 @@ export async function POST(request: Request) {
   } = await request.json();
 
   const session = await auth();
+  // Bonsai is the owner's home GPU: refuse before doing any other work.
+  if (modelSource === 'bonsai' && !canUseBonsai(session)) return bonsaiDenied(session);
   const userId = session?.githubUserId;
   const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
   const lastUserText = lastUserMessage ? textOf(lastUserMessage) : '';
