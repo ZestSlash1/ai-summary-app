@@ -13,10 +13,11 @@ import { after } from 'next/server';
 import { auth } from '@/auth';
 import { retrieveMemory } from '@/lib/memory';
 import { getUserSkills, logSignalAndMaybePropose, messageMatchesKnownSkill } from '@/lib/skillDiscovery';
-import { fetchGatewayModels, fetchOmniRouteModels } from '@/lib/modelCatalog';
+import { fetchGatewayModels, fetchOmniRouteModels, fetchBonsaiModels } from '@/lib/modelCatalog';
 import { FALLBACK_MODEL } from '@/lib/types';
+import { safeEvaluate } from '@/lib/calc';
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const builtinTools = {
   getCurrentTime: tool({
@@ -29,7 +30,7 @@ const builtinTools = {
     inputSchema: z.object({ expression: z.string() }),
     execute: async ({ expression }) => {
       try {
-        const result = Function(`"use strict"; return (${expression})`)();
+        const result = safeEvaluate(expression);
         return { result };
       } catch {
         return { error: 'Could not evaluate that expression.' };
@@ -50,24 +51,41 @@ Only add a path when the code is meant to be saved as a real file in the user's 
 
 type McpConnectorInput = { url: string; authHeader?: string };
 type GithubRepoInput = { owner: string; name: string; branch: string };
-type ModelSource = 'gateway' | 'omniroute';
+type ModelSource = 'gateway' | 'omniroute' | 'bonsai';
 
 let omniroute: ReturnType<typeof createOpenAICompatible> | null = null;
+let bonsai: ReturnType<typeof createOpenAICompatible> | null = null;
 
 function resolveModel(model: string, source: ModelSource | undefined) {
-  if (source !== 'omniroute') return model;
-  if (!omniroute) {
-    const baseURL = process.env.OMNIROUTE_BASE_URL;
-    if (!baseURL) {
-      throw new Error('OmniRoute is not configured (OMNIROUTE_BASE_URL missing).');
+  if (source === 'bonsai') {
+    if (!bonsai) {
+      const baseURL = process.env.BONSAI_BASE_URL;
+      if (!baseURL) {
+        throw new Error('Bonsai is not configured (BONSAI_BASE_URL missing).');
+      }
+      bonsai = createOpenAICompatible({
+        name: 'bonsai',
+        baseURL,
+        apiKey: process.env.BONSAI_API_KEY,
+      });
     }
-    omniroute = createOpenAICompatible({
-      name: 'omniroute',
-      baseURL,
-      apiKey: process.env.OMNIROUTE_API_KEY,
-    });
+    return bonsai(model);
   }
-  return omniroute(model);
+  if (source === 'omniroute') {
+    if (!omniroute) {
+      const baseURL = process.env.OMNIROUTE_BASE_URL;
+      if (!baseURL) {
+        throw new Error('OmniRoute is not configured (OMNIROUTE_BASE_URL missing).');
+      }
+      omniroute = createOpenAICompatible({
+        name: 'omniroute',
+        baseURL,
+        apiKey: process.env.OMNIROUTE_API_KEY,
+      });
+    }
+    return omniroute(model);
+  }
+  return model;
 }
 
 function textOf(message: UIMessage): string {
@@ -170,13 +188,18 @@ export async function POST(request: Request) {
   // of a hardcoded id that can silently rot.
   async function resolveDefaultModel(): Promise<string> {
     try {
-      const models =
-        modelSource === 'omniroute'
-          ? await fetchOmniRouteModels()
-          : await fetchGatewayModels();
+      let models;
+      if (modelSource === 'bonsai') {
+        models = await fetchBonsaiModels();
+      } else if (modelSource === 'omniroute') {
+        models = await fetchOmniRouteModels();
+      } else {
+        models = await fetchGatewayModels();
+      }
       const free = models.find((m) => m.free);
-      return (free ?? models[0])?.id ?? FALLBACK_MODEL;
+      return (free ?? models[0])?.id ?? (modelSource === 'bonsai' ? 'bonsai-2-27b' : FALLBACK_MODEL);
     } catch {
+      if (modelSource === 'bonsai') return 'bonsai-2-27b';
       return modelSource === 'omniroute' ? 'auto/best-free' : FALLBACK_MODEL;
     }
   }
