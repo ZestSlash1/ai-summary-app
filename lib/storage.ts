@@ -60,13 +60,13 @@ export function saveDefaultModel(model: string) {
   window.localStorage.setItem(DEFAULT_MODEL_KEY, model);
 }
 
-export type ModelSource = "gateway" | "omniroute";
+export type ModelSource = "gateway" | "omniroute" | "bonsai";
 
 export function loadModelSource(): ModelSource {
   if (typeof window === "undefined") return "gateway";
-  return window.localStorage.getItem(MODEL_SOURCE_KEY) === "omniroute"
-    ? "omniroute"
-    : "gateway";
+  const raw = window.localStorage.getItem(MODEL_SOURCE_KEY);
+  if (raw === "omniroute" || raw === "bonsai") return raw;
+  return "gateway";
 }
 
 export function saveModelSource(source: ModelSource) {
