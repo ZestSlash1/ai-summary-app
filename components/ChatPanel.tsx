@@ -288,7 +288,7 @@ export function ChatPanel({
                 <div
                   className={
                     message.role === "user"
-                      ? "rounded-[var(--nimbus-radius-card)] rounded-br-lg bg-nimbus-accent px-4 py-3 text-sm leading-relaxed text-white shadow-[var(--nimbus-shadow)]"
+                      ? "rounded-[var(--nimbus-radius-card)] rounded-br-lg bg-nimbus-accent px-4 py-3 text-sm leading-relaxed text-[var(--nimbus-on-accent)] shadow-[var(--nimbus-shadow)]"
                       : "rounded-[var(--nimbus-radius-card)] rounded-bl-lg border border-nimbus-border bg-nimbus-surface px-4 py-3 text-sm leading-relaxed text-nimbus-text shadow-[var(--nimbus-inset-highlight),var(--nimbus-shadow)]"
                   }
                 >

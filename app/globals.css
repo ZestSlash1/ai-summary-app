@@ -11,6 +11,8 @@
   --nimbus-text: #1a1a2e;
   --nimbus-text-muted: #6b6a80;
   --nimbus-accent: #5b57f5;
+  /* Text and icons drawn on top of --nimbus-accent. White is 5.1:1 on this indigo. */
+  --nimbus-on-accent: #ffffff;
   --nimbus-accent-soft: #ecebff;
   --nimbus-free: #16a37a;
   --nimbus-free-soft: #e4f7f0;
@@ -70,6 +72,8 @@
   --nimbus-text: #f2f2f0;
   --nimbus-text-muted: #8c8c87;
   --nimbus-accent: #4c8dff;
+  /* White on this bright blue is only 3.2:1, so text on it goes near-black (6:1). */
+  --nimbus-on-accent: #0a0a0a;
   --nimbus-accent-soft: rgba(76, 141, 255, 0.14);
   --nimbus-free: #22d9a0;
   --nimbus-free-soft: rgba(34, 217, 160, 0.14);
