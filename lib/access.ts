@@ -16,11 +16,14 @@ export function canUseBonsai(
   return allowed.includes(String(id));
 }
 
-/** 401 when signed out, 403 when signed in but not allow-listed. */
-export function bonsaiDenied(session: { githubUserId?: string } | null | undefined): Response {
+/** 401 when signed out, 403 when signed in but not allow-listed. `what` names the feature in the message. */
+export function bonsaiDenied(
+  session: { githubUserId?: string } | null | undefined,
+  what = 'Bonsai',
+): Response {
   const signedIn = Boolean(session?.githubUserId);
   return Response.json(
-    { error: signedIn ? 'Your account is not allowed to use Bonsai.' : 'Sign in to use Bonsai.' },
+    { error: signedIn ? `Your account is not allowed to use ${what}.` : `Sign in to use ${what}.` },
     { status: signedIn ? 403 : 401 },
   );
 }

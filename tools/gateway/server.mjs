@@ -150,6 +150,20 @@ export function createGateway(cfg) {
     }
   }
 
+  // Drop ComfyUI's cached models so Bonsai can reload into the VRAM they held.
+  async function freeComfy() {
+    try {
+      await fetch(`${cfg.comfy}/free`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ unload_models: true, free_memory: true }),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      // ComfyUI gone or slow: nothing left to free.
+    }
+  }
+
   async function watchImageJob() {
     const deadline = Date.now() + cfg.jobTimeoutMs;
     await sleep(cfg.pollMs);
@@ -157,6 +171,8 @@ export function createGateway(cfg) {
       if (await comfyIdle()) break;
       await sleep(cfg.pollMs);
     }
+    // Free first, release the lock second, so a chat can never race the unload.
+    await freeComfy();
     state.imageBusy = false;
   }
 

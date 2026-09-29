@@ -2,6 +2,7 @@ import {
   streamText,
   convertToModelMessages,
   stepCountIs,
+  hasToolCall,
   tool,
   type UIMessage,
   type ToolSet,
@@ -17,6 +18,8 @@ import { fetchGatewayModels, fetchOmniRouteModels, fetchBonsaiModels } from '@/l
 import { FALLBACK_MODEL } from '@/lib/types';
 import { safeEvaluate } from '@/lib/calc';
 import { canUseBonsai, bonsaiDenied } from '@/lib/access';
+import { comfy, friendlyComfyError } from '@/lib/comfy';
+import { extractLatestImage } from '@/lib/imageParts';
 
 export const maxDuration = 60;
 
@@ -136,13 +139,47 @@ export async function POST(request: Request) {
     mcpClients.map((client) => client?.tools().catch(() => ({})))
   );
 
+  // Image editing runs on the owner's home GPU, so it is offered only to allow-listed
+  // users, and only when the latest message actually carries an image to edit.
+  const attachedImage = canUseBonsai(session) ? extractLatestImage(messages) : null;
+  const imageTools: ToolSet = attachedImage
+    ? {
+        editImage: tool({
+          description:
+            'Edit the image the user attached, following a plain-language instruction. ' +
+            'Starts an edit job that takes a couple of minutes. The result appears in the chat by itself.',
+          inputSchema: z.object({
+            instruction: z
+              .string()
+              .min(3)
+              .max(800)
+              .describe('What to change, for example "make the sky overcast". Describe only the change.'),
+          }),
+          execute: async ({ instruction }) => {
+            try {
+              const { jobId } = await comfy().startEdit({ instruction, image: attachedImage });
+              return { jobId, status: 'queued' as const };
+            } catch (err) {
+              return { error: friendlyComfyError(err) };
+            }
+          },
+        }),
+      }
+    : {};
+
   const tools: ToolSet = Object.assign(
     {},
     builtinTools,
+    imageTools,
     ...mcpToolSets.filter(Boolean)
   );
 
   let systemPrompt = BASE_SYSTEM_PROMPT;
+  if (attachedImage) {
+    systemPrompt +=
+      '\n\nThe user attached an image. If they want it changed, call editImage once with a clear instruction. ' +
+      'Do not describe the finished picture, it is shown to them automatically.';
+  }
 
   // Project memory: recall relevant chunks from a connected repo, so the
   // assistant isn't starting cold each session.
@@ -212,11 +249,20 @@ export async function POST(request: Request) {
     system: systemPrompt,
     messages: await convertToModelMessages(messages),
     tools,
-    stopWhen: stepCountIs(5),
+    // The edit result is shown by the UI, so end the turn there: another model step would
+    // only compete with the image job for the GPU.
+    stopWhen: [stepCountIs(5), hasToolCall('editImage')],
     onFinish: async () => {
       await Promise.all(mcpClients.map((client) => client?.close()));
     },
   });
 
-  return result.toUIMessageStreamResponse();
+  return result.toUIMessageStreamResponse({
+    // By default the client only sees a generic error. Say so when the GPU is in use by an
+    // image edit; everything else stays generic so provider details never reach the browser.
+    onError: (err) =>
+      /image edit is using the GPU|gpu_busy/i.test(err instanceof Error ? err.message : '')
+        ? 'An image edit is using the GPU. Try again in a minute.'
+        : 'Something went wrong. Try again.',
+  });
 }

@@ -141,6 +141,7 @@ test('image job blocks chat until ComfyUI is idle, then releases', async () => {
 
   t.comfyState.running = 0;
   await new Promise((r2) => setTimeout(r2, 400));
+  assert.ok(t.seen.comfyPaths.includes('POST /free'), 'gateway frees ComfyUI models when the job ends');
   const ok = await t.call('POST', '/v1/chat/completions', { body: '{}' });
   assert.equal(ok.status, 200);
   await ok.text();
