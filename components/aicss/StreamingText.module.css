@@ -1,4 +1,4 @@
-.prose { max-width: 100%; font-size: 14px; line-height: 19px; color: var(--nimbus-text); overflow-wrap: anywhere; }
+.prose { max-width: 100%; font-size: 14px; line-height: 19px; color: inherit; overflow-wrap: anywhere; }
 .caret { display: inline-block; width: 8px; height: 1.05em; margin-left: 2px; background: var(--nimbus-accent); vertical-align: text-bottom; animation: caret-blink 1s step-end infinite; }
 /* solid while streaming, blink only once idle (matches the live component) */
 .caretSteady { animation: none; opacity: 1; }

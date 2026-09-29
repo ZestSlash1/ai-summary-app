@@ -2,6 +2,7 @@ import {
   streamText,
   convertToModelMessages,
   stepCountIs,
+  hasToolCall,
   tool,
   type UIMessage,
   type ToolSet,
@@ -13,10 +14,14 @@ import { after } from 'next/server';
 import { auth } from '@/auth';
 import { retrieveMemory } from '@/lib/memory';
 import { getUserSkills, logSignalAndMaybePropose, messageMatchesKnownSkill } from '@/lib/skillDiscovery';
-import { fetchGatewayModels, fetchOmniRouteModels } from '@/lib/modelCatalog';
+import { fetchGatewayModels, fetchOmniRouteModels, fetchBonsaiModels } from '@/lib/modelCatalog';
 import { FALLBACK_MODEL } from '@/lib/types';
+import { safeEvaluate } from '@/lib/calc';
+import { canUseBonsai, bonsaiDenied } from '@/lib/access';
+import { comfy, friendlyComfyError } from '@/lib/comfy';
+import { extractLatestImage } from '@/lib/imageParts';
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const builtinTools = {
   getCurrentTime: tool({
@@ -29,7 +34,7 @@ const builtinTools = {
     inputSchema: z.object({ expression: z.string() }),
     execute: async ({ expression }) => {
       try {
-        const result = Function(`"use strict"; return (${expression})`)();
+        const result = safeEvaluate(expression);
         return { result };
       } catch {
         return { error: 'Could not evaluate that expression.' };
@@ -50,24 +55,41 @@ Only add a path when the code is meant to be saved as a real file in the user's 
 
 type McpConnectorInput = { url: string; authHeader?: string };
 type GithubRepoInput = { owner: string; name: string; branch: string };
-type ModelSource = 'gateway' | 'omniroute';
+type ModelSource = 'gateway' | 'omniroute' | 'bonsai';
 
 let omniroute: ReturnType<typeof createOpenAICompatible> | null = null;
+let bonsai: ReturnType<typeof createOpenAICompatible> | null = null;
 
 function resolveModel(model: string, source: ModelSource | undefined) {
-  if (source !== 'omniroute') return model;
-  if (!omniroute) {
-    const baseURL = process.env.OMNIROUTE_BASE_URL;
-    if (!baseURL) {
-      throw new Error('OmniRoute is not configured (OMNIROUTE_BASE_URL missing).');
+  if (source === 'bonsai') {
+    if (!bonsai) {
+      const baseURL = process.env.BONSAI_BASE_URL;
+      if (!baseURL) {
+        throw new Error('Bonsai is not configured (BONSAI_BASE_URL missing).');
+      }
+      bonsai = createOpenAICompatible({
+        name: 'bonsai',
+        baseURL,
+        apiKey: process.env.BONSAI_API_KEY,
+      });
     }
-    omniroute = createOpenAICompatible({
-      name: 'omniroute',
-      baseURL,
-      apiKey: process.env.OMNIROUTE_API_KEY,
-    });
+    return bonsai(model);
   }
-  return omniroute(model);
+  if (source === 'omniroute') {
+    if (!omniroute) {
+      const baseURL = process.env.OMNIROUTE_BASE_URL;
+      if (!baseURL) {
+        throw new Error('OmniRoute is not configured (OMNIROUTE_BASE_URL missing).');
+      }
+      omniroute = createOpenAICompatible({
+        name: 'omniroute',
+        baseURL,
+        apiKey: process.env.OMNIROUTE_API_KEY,
+      });
+    }
+    return omniroute(model);
+  }
+  return model;
 }
 
 function textOf(message: UIMessage): string {
@@ -93,6 +115,8 @@ export async function POST(request: Request) {
   } = await request.json();
 
   const session = await auth();
+  // Bonsai is the owner's home GPU: refuse before doing any other work.
+  if (modelSource === 'bonsai' && !canUseBonsai(session)) return bonsaiDenied(session);
   const userId = session?.githubUserId;
   const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
   const lastUserText = lastUserMessage ? textOf(lastUserMessage) : '';
@@ -115,13 +139,47 @@ export async function POST(request: Request) {
     mcpClients.map((client) => client?.tools().catch(() => ({})))
   );
 
+  // Image editing runs on the owner's home GPU, so it is offered only to allow-listed
+  // users, and only when the latest message actually carries an image to edit.
+  const attachedImage = canUseBonsai(session) ? extractLatestImage(messages) : null;
+  const imageTools: ToolSet = attachedImage
+    ? {
+        editImage: tool({
+          description:
+            'Edit the image the user attached, following a plain-language instruction. ' +
+            'Starts an edit job that takes a couple of minutes. The result appears in the chat by itself.',
+          inputSchema: z.object({
+            instruction: z
+              .string()
+              .min(3)
+              .max(800)
+              .describe('What to change, for example "make the sky overcast". Describe only the change.'),
+          }),
+          execute: async ({ instruction }) => {
+            try {
+              const { jobId } = await comfy().startEdit({ instruction, image: attachedImage });
+              return { jobId, status: 'queued' as const };
+            } catch (err) {
+              return { error: friendlyComfyError(err) };
+            }
+          },
+        }),
+      }
+    : {};
+
   const tools: ToolSet = Object.assign(
     {},
     builtinTools,
+    imageTools,
     ...mcpToolSets.filter(Boolean)
   );
 
   let systemPrompt = BASE_SYSTEM_PROMPT;
+  if (attachedImage) {
+    systemPrompt +=
+      '\n\nThe user attached an image. If they want it changed, call editImage once with a clear instruction. ' +
+      'Do not describe the finished picture, it is shown to them automatically.';
+  }
 
   // Project memory: recall relevant chunks from a connected repo, so the
   // assistant isn't starting cold each session.
@@ -170,13 +228,18 @@ export async function POST(request: Request) {
   // of a hardcoded id that can silently rot.
   async function resolveDefaultModel(): Promise<string> {
     try {
-      const models =
-        modelSource === 'omniroute'
-          ? await fetchOmniRouteModels()
-          : await fetchGatewayModels();
+      let models;
+      if (modelSource === 'bonsai') {
+        models = await fetchBonsaiModels();
+      } else if (modelSource === 'omniroute') {
+        models = await fetchOmniRouteModels();
+      } else {
+        models = await fetchGatewayModels();
+      }
       const free = models.find((m) => m.free);
-      return (free ?? models[0])?.id ?? FALLBACK_MODEL;
+      return (free ?? models[0])?.id ?? (modelSource === 'bonsai' ? 'bonsai-2-27b' : FALLBACK_MODEL);
     } catch {
+      if (modelSource === 'bonsai') return 'bonsai-2-27b';
       return modelSource === 'omniroute' ? 'auto/best-free' : FALLBACK_MODEL;
     }
   }
@@ -186,11 +249,20 @@ export async function POST(request: Request) {
     system: systemPrompt,
     messages: await convertToModelMessages(messages),
     tools,
-    stopWhen: stepCountIs(5),
+    // The edit result is shown by the UI, so end the turn there: another model step would
+    // only compete with the image job for the GPU.
+    stopWhen: [stepCountIs(5), hasToolCall('editImage')],
     onFinish: async () => {
       await Promise.all(mcpClients.map((client) => client?.close()));
     },
   });
 
-  return result.toUIMessageStreamResponse();
+  return result.toUIMessageStreamResponse({
+    // By default the client only sees a generic error. Say so when the GPU is in use by an
+    // image edit; everything else stays generic so provider details never reach the browser.
+    onError: (err) =>
+      /image edit is using the GPU|gpu_busy/i.test(err instanceof Error ? err.message : '')
+        ? 'An image edit is using the GPU. Try again in a minute.'
+        : 'Something went wrong. Try again.',
+  });
 }

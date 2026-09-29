@@ -58,3 +58,36 @@ export async function fetchOmniRouteModels(): Promise<ModelOption[]> {
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
+
+type BonsaiModel = {
+  id: string;
+};
+
+export async function fetchBonsaiModels(): Promise<ModelOption[]> {
+  const baseURL = process.env.BONSAI_BASE_URL;
+  if (!baseURL) return [];
+
+  try {
+    const res = await fetch(`${baseURL}/models`, {
+      headers: process.env.BONSAI_API_KEY
+        ? { Authorization: `Bearer ${process.env.BONSAI_API_KEY}` }
+        : undefined,
+      signal: AbortSignal.timeout(4000),
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) return [];
+
+    const body = (await res.json()) as { data: BonsaiModel[] };
+    return (body.data ?? [])
+      .map((m) => ({
+        id: m.id,
+        name: m.id,
+        free: true,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    // Return empty array when PC is off or tunnel unreachable (never throw 500)
+    return [];
+  }
+}
+

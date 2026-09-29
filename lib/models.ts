@@ -4,7 +4,8 @@ import { FALLBACK_MODEL } from "./types";
 
 const LAST_RESORT: Record<ModelSource, string> = {
   omniroute: "auto/best-free",
-  gateway: FALLBACK_MODEL, // only used if /api/models itself fails
+  gateway: FALLBACK_MODEL,
+  bonsai: "bonsai-2-27b",
 };
 
 export async function fetchDefaultModelForSource(

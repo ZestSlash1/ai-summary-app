@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import type { ModelSource } from "@/lib/storage";
 import { loadModelSource, saveModelSource } from "@/lib/storage";
+import { BonsaiStateLine } from "@/components/GpuStatus";
 
 const OPTIONS: { value: ModelSource; label: string }[] = [
   { value: "gateway", label: "AI Gateway" },
-  { value: "omniroute", label: "OmniRoute (self-hosted)" },
+  { value: "omniroute", label: "OmniRoute" },
+  { value: "bonsai", label: "Bonsai (Local)" },
 ];
 
 export function ModelSourceToggle() {
@@ -23,6 +25,7 @@ export function ModelSourceToggle() {
   }
 
   return (
+    <div className="flex flex-col items-start gap-2.5">
     <div className="inline-flex rounded-[var(--nimbus-radius-pill)] border border-nimbus-border bg-nimbus-bg p-1">
       {OPTIONS.map((opt) => (
         <button
@@ -38,6 +41,8 @@ export function ModelSourceToggle() {
           {opt.label}
         </button>
       ))}
+    </div>
+    <BonsaiStateLine active={source === "bonsai"} />
     </div>
   );
 }
