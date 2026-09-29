@@ -1,15 +1,23 @@
-import { fetchGatewayModels, fetchOmniRouteModels } from "@/lib/modelCatalog";
+import {
+  fetchGatewayModels,
+  fetchOmniRouteModels,
+  fetchBonsaiModels,
+} from "@/lib/modelCatalog";
 
-export const revalidate = 600;
+export const revalidate = 60;
 
 export async function GET(request: Request) {
   const source = new URL(request.url).searchParams.get("source");
 
   try {
-    const models =
-      source === "omniroute"
-        ? await fetchOmniRouteModels()
-        : await fetchGatewayModels();
+    let models;
+    if (source === "bonsai") {
+      models = await fetchBonsaiModels();
+    } else if (source === "omniroute") {
+      models = await fetchOmniRouteModels();
+    } else {
+      models = await fetchGatewayModels();
+    }
     return Response.json(models);
   } catch (err) {
     return Response.json(
