@@ -1,0 +1,26 @@
+{
+  "note": "Node ids inside qwen_edit.api.json that lib/comfy.ts patches per request. Default working size is 0.5 megapixels (measured 132 s per edit on the RTX 3060 vs 172 s at 1 MP). Raise megapixels for more detail at the cost of time.",
+  "inputImage": {
+    "node": "7",
+    "field": "image"
+  },
+  "prompt": {
+    "node": "9",
+    "field": "prompt"
+  },
+  "seed": {
+    "node": "14",
+    "field": "seed"
+  },
+  "steps": {
+    "node": "14",
+    "field": "steps"
+  },
+  "output": {
+    "node": "16"
+  },
+  "megapixels": {
+    "node": "8",
+    "field": "megapixels"
+  }
+}
