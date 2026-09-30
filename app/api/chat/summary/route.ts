@@ -5,7 +5,8 @@ import {
 } from 'ai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { auth } from '@/auth';
-import { canUseBonsai, bonsaiDenied } from '@/lib/access';
+import { canUseBonsai, bonsaiDenied, paidModelDenied } from '@/lib/access';
+import { fetchCloudModels } from '@/lib/modelCatalog';
 import { parseModelRef } from '@/lib/modelRef';
 import { FALLBACK_MODEL } from '@/lib/types';
 import type { ModelSource } from '@/lib/storage';
@@ -98,6 +99,10 @@ export async function POST(request: Request) {
         { error: 'Hermes manages its own context, so it does not need a summary.' },
         { status: 400 }
       );
+    }
+    if (modelRef.source !== 'bonsai') {
+      const denied = await paidModelDenied(session, modelRef.id, () => fetchCloudModels(modelRef.source));
+      if (denied) return denied;
     }
 
     if (!Array.isArray(messages) || messages.length === 0) {

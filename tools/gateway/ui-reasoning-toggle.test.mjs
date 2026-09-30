@@ -22,7 +22,8 @@ test('ModelSwitcher.tsx keeps a local Bonsai group and no em-dashes', () => {
   const filePath = path.resolve('components/ModelSwitcher.tsx');
   const content = fs.readFileSync(filePath, 'utf-8');
   assert.ok(content.includes('On your PC · Bonsai'), 'Expected a local Bonsai group in the model picker');
-  assert.ok(content.includes('locked: true'), 'Expected Bonsai to stay listed (locked) for accounts without access');
+  assert.ok(content.includes('locked: { subject: "bonsai"'), 'Expected Bonsai to stay listed (locked) for accounts without access');
+  assert.ok(content.includes('locked: { subject: "paid"'), 'Expected paid models to show as locked for accounts without access');
   assert.ok(!content.includes('—'), 'ModelSwitcher should contain zero em-dashes');
 });
 

@@ -61,6 +61,11 @@ export async function fetchOmniRouteModels(): Promise<ModelOption[]> {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** The catalog a cloud model runs through: OmniRoute's for "omniroute", AI Gateway's otherwise. */
+export function fetchCloudModels(source: string | undefined): Promise<ModelOption[]> {
+  return source === "omniroute" ? fetchOmniRouteModels() : fetchGatewayModels();
+}
+
 type BonsaiModel = {
   id: string;
 };
