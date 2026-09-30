@@ -9,8 +9,10 @@ export type GpuStatus = {
   configured: boolean;
   reachable: boolean;
   bonsai: GpuState;
+  bonsaiContext?: number | null;
   comfy: GpuState;
   imageBusy: boolean;
+  hermes?: "online" | "offline" | "unconfigured";
 };
 
 type Snapshot = { allowed: boolean; status: GpuStatus | null };

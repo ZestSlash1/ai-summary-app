@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
-import { CornerDownLeft, MessageSquare, Search } from "lucide-react";
+import { CornerDownLeft, MessageSquare, Search, SquareCode } from "lucide-react";
 import type { Conversation } from "@/lib/types";
 import { gsap, useGSAP, reducedMotion } from "@/lib/motion";
 import { relativeTime } from "@/lib/dateGroups";
@@ -187,7 +187,7 @@ export function CommandPalette({
               chatHeaderShown = true;
               header = query ? "Chats" : "Recent chats";
             }
-            const Icon = item.kind === "action" ? item.action.icon : MessageSquare;
+            const Icon = item.kind === "action" ? item.action.icon : item.conversation.mode === "code" ? SquareCode : MessageSquare;
             return (
               <div key={item.id}>
                 {header && <p className="px-3 pb-1 pt-2.5 text-[11.5px] text-nimbus-text-faint">{header}</p>}

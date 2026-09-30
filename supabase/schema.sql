@@ -66,3 +66,23 @@ create table if not exists skill_signals (
 );
 
 alter table skill_signals enable row level security;
+
+-- Skills installed from GitHub (Coding area > Skills). One row per user and skill; reinstalling
+-- updates the row. `files` holds the skill's text files as { "SKILL.md": "...", ... }.
+create table if not exists installed_skills (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  skill_id text not null,
+  name text not null,
+  description text not null default '',
+  repo text not null,
+  path text not null default '',
+  branch text not null default 'main',
+  files jsonb not null default '{}'::jsonb,
+  enabled boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, skill_id)
+);
+
+alter table installed_skills enable row level security;

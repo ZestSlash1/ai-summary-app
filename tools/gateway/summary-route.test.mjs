@@ -1,0 +1,47 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { parseModelRef } from '../../lib/modelRef.ts';
+
+test('summary prompt requests goals, decisions, files touched, and open tasks without em-dashes', () => {
+  const prompt = 'Please provide a handoff summary: goals, decisions, files touched, open tasks.';
+  assert.match(prompt, /goals/);
+  assert.match(prompt, /decisions/);
+  assert.match(prompt, /files touched/);
+  assert.match(prompt, /open tasks/);
+  assert.doesNotMatch(prompt, /—/);
+});
+
+test('app/api/chat/summary/route.ts implements summary endpoint without em-dashes', () => {
+  const filePath = path.resolve('app/api/chat/summary/route.ts');
+  assert.ok(fs.existsSync(filePath), 'Expected app/api/chat/summary/route.ts to exist');
+  const content = fs.readFileSync(filePath, 'utf-8');
+  assert.ok(content.includes('export async function POST'), 'Expected POST handler');
+  assert.ok(content.includes('generateText'), 'Expected generateText call');
+  assert.match(content, /goals/i);
+  assert.match(content, /decisions/i);
+  assert.match(content, /files touched/i);
+  assert.match(content, /open tasks/i);
+  assert.doesNotMatch(content, /—/, 'Expected no em-dashes in route.ts');
+});
+
+test('app/api/chat/summary/route.ts checks Bonsai access and never sends a transcript to Hermes', () => {
+  const filePath = path.resolve('app/api/chat/summary/route.ts');
+  const content = fs.readFileSync(filePath, 'utf-8');
+  assert.ok(content.includes('canUseBonsai(session)'), 'Expected canUseBonsai check');
+  assert.ok(content.includes('bonsaiDenied(session)'), 'Expected bonsaiDenied response for unauthorized bonsai access');
+  // Hermes is an agent with tools and memory: summarizing through it would run a full agent turn.
+  assert.match(content, /modelRef\.source === 'hermes'[\s\S]{0,400}status: 400/, 'Expected Hermes to be refused with a 400');
+  assert.doesNotMatch(content, /createOpenAICompatible\(\{\s*name: 'hermes'/, 'Expected no Hermes model client in the summary route');
+  // A chat continued twice starts with a system-role hand-off, which the SDK rejects in messages.
+  assert.ok(content.includes('splitSystemMessages'), 'Expected system hand-offs to be lifted out of messages');
+  assert.doesNotMatch(content, /error instanceof Error \? error\.message/, 'Expected upstream errors not to reach the client');
+});
+
+test('model resolution for summary parses model references correctly', () => {
+  assert.deepEqual(parseModelRef('bonsai::bonsai-2-27b'), { source: 'bonsai', id: 'bonsai-2-27b' });
+  assert.deepEqual(parseModelRef('omniroute::deepseek-r1'), { source: 'omniroute', id: 'deepseek-r1' });
+  assert.deepEqual(parseModelRef('hermes::hermes-agent'), { source: 'hermes', id: 'hermes-agent' });
+  assert.deepEqual(parseModelRef('google/gemini-2.5-flash'), { source: 'gateway', id: 'google/gemini-2.5-flash' });
+});

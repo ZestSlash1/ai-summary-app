@@ -18,6 +18,9 @@ Copy values into `tools/gateway/.env.gateway` (git-ignored by the root `.env*` r
 | `LLAMA_URL` | `http://127.0.0.1:8090` | llama-server |
 | `LLAMA_API_KEY` | empty | If llama-server runs with `--api-key`, the gateway sends this instead of the client token |
 | `COMFY_URL` | `http://127.0.0.1:8188` | ComfyUI |
+| `HERMES_URL` | `http://127.0.0.1:8642` | Hermes Agent's API server (run `hermes gateway` in WSL) |
+| `HERMES_API_KEY` | empty | Hermes's `API_SERVER_KEY`. Empty means Hermes is off and `/hermes/*` answers 503 |
+| `HERMES_SKILLS_DIR` | empty | Folder Hermes reads skills from. For Hermes in WSL use the `\\wsl.localhost\Ubuntu\home\<user>\.hermes\skills` path, not the Windows home folder. Empty turns "Install to Hermes" off (503). Skills ARO did not install are never overwritten |
 | `GPU_ARBITRATION` | `sleep` | `sleep`: image jobs wait for llama-server to sleep. `off`: no arbitration |
 | `SLEEP_WAIT_MS` | 60000 | How long an image job waits for Bonsai to release the GPU |
 | `JOB_TIMEOUT_MS` | 300000 | Longest an image job can hold the GPU lock |

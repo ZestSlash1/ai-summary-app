@@ -3,11 +3,12 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { ArrowDown, Brain, ChevronRight, ImagePlus, ListChecks, RotateCw } from "lucide-react";
+import { ArrowDown, Brain, ChevronRight, ImagePlus, Layers, ListChecks, RotateCw } from "lucide-react";
 import { gsap, useGSAP, Flip, reducedMotion } from "@/lib/motion";
 import { ModelSwitcher } from "./ModelSwitcher";
 import { RepoConnect } from "./RepoConnect";
 import { McpConnectors } from "./McpConnectors";
+import { WorkspaceRail } from "./workspace/WorkspaceRail";
 import { SkillPrompt } from "./SkillPrompt";
 import { MessageActions } from "./MessageActions";
 import { ThinkingIndicator } from "./ThinkingIndicator";
@@ -17,7 +18,11 @@ import { ImageJobCard } from "./ImageJobCard";
 import { MessageText } from "./chat/Markdown";
 import { ToolActivity, type ToolCall } from "./chat/ToolActivity";
 import { PushCard } from "./chat/PushCard";
+import { HermesApprovalCard } from "./chat/HermesApproval";
+import type { HermesApproval } from "@/lib/hermesStream";
 import { Composer } from "./chat/Composer";
+import { SkillsPicker } from "./chat/SkillsPicker";
+import { AgentOptionsPopover } from "./chat/AgentOptionsPopover";
 import {
   WelcomeBanner,
   WelcomeHero,
@@ -28,11 +33,23 @@ import {
 import { CHIP } from "./ui/classes";
 import { extractPushableFiles } from "@/lib/codeBlocks";
 import type { McpConnector } from "@/lib/mcp";
-import type { Conversation, GithubRepoLink } from "@/lib/types";
-import { loadModelSource, type ModelSource } from "@/lib/storage";
+import type { AgentOptions, Conversation, GithubRepoLink } from "@/lib/types";
+import { useToast } from "./Toaster";
+import {
+  createConversation,
+  loadModelSource,
+  loadConversations,
+  saveConversations,
+  loadOpenTabs,
+  saveOpenTabs,
+  saveActiveId,
+  titleFromMessage,
+  type ModelSource,
+} from "@/lib/storage";
 import { parseModelRef } from "@/lib/modelRef";
 import { useHomeGpu } from "@/lib/useHomeGpu";
 import { ImageError, prepareImage, type PreparedImage } from "@/lib/imageResize";
+import { estimateConversationTokens, getModelContextLimit, calculateContextUsage } from "@/lib/tokenEstimate";
 
 function textOf(message: UIMessage): string {
   return message.parts
@@ -52,7 +69,7 @@ function chatErrorText(err: Error, source: ModelSource): string {
   } catch {
     // Not JSON: use the message as is.
   }
-  if (/sign in|not allowed|GPU|image edit/i.test(text)) return text;
+  if (/sign in|not allowed|GPU|image edit|Hermes/i.test(text)) return text;
   if (source === "bonsai") {
     return "Bonsai did not respond. Check that the home PC is on (Settings shows its state), then try again.";
   }
@@ -67,7 +84,8 @@ type Block =
   | { kind: "reasoning"; key: string; text: string; live: boolean }
   | { kind: "tools"; key: string; calls: ToolCall[] }
   | { kind: "image"; key: string; url: string; filename?: string }
-  | { kind: "editImage"; key: string; part: Part };
+  | { kind: "editImage"; key: string; part: Part }
+  | { kind: "approval"; key: string; approval: HermesApproval };
 
 function toBlocks(parts: Part[]): Block[] {
   const blocks: Block[] = [];
@@ -79,6 +97,12 @@ function toBlocks(parts: Part[]): Block[] {
 
   parts.forEach((part, i) => {
     if (part.type === "step-start") return;
+    if (part.type === "data-hermes-approval") {
+      flush();
+      const p = part as { id?: string; data: HermesApproval };
+      blocks.push({ kind: "approval", key: p.id ?? `a-${i}`, approval: p.data });
+      return;
+    }
     if (part.type === "reasoning") {
       const p = part as { text?: string; reasoning?: string; state?: string };
       const text = p.reasoning || p.text || "";
@@ -180,6 +204,7 @@ function Reasoning({ text, live }: { text: string; live: boolean }) {
 
 export function ChatPanel({
   conversationId,
+  mode,
   active,
   initialMessages,
   model,
@@ -192,8 +217,11 @@ export function ChatPanel({
   signedIn,
   onSelectConversation,
   onStreamingChange,
+  continuedFrom,
+  continuedIn,
 }: {
   conversationId: string;
+  mode?: "chat" | "code";
   active: boolean;
   initialMessages: UIMessage[];
   model: string;
@@ -206,19 +234,56 @@ export function ChatPanel({
   signedIn: boolean;
   onSelectConversation: (id: string) => void;
   onStreamingChange: (conversationId: string, streaming: boolean) => void;
+  continuedFrom?: { id: string; title: string };
+  continuedIn?: { id: string; title: string };
 }) {
+  const links = useMemo(() => {
+    if (continuedFrom || continuedIn) {
+      return { continuedFrom, continuedIn };
+    }
+    if (typeof window !== "undefined") {
+      const conv = loadConversations().find((c) => c.id === conversationId);
+      return {
+        continuedFrom: conv?.continuedFrom,
+        continuedIn: conv?.continuedIn,
+      };
+    }
+    return {};
+  }, [conversationId, continuedFrom, continuedIn]);
+
   const modelRef = useRef(model);
   const repoRef = useRef(githubRepo);
   const [enabledConnectors, setEnabledConnectors] = useState<McpConnector[]>([]);
   const connectorsRef = useRef(enabledConnectors);
   const [plan, setPlan] = useState(false);
   const planRef = useRef(plan);
+  const [agentOptions, setAgentOptions] = useState<AgentOptions>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const conv = loadConversations().find((c) => c.id === conversationId);
+      return conv?.agentOptions ?? {};
+    } catch {
+      return {};
+    }
+  });
+  const agentOptionsRef = useRef(agentOptions);
+
   useEffect(() => {
     modelRef.current = model;
     repoRef.current = githubRepo;
     connectorsRef.current = enabledConnectors;
     planRef.current = plan;
-  }, [model, githubRepo, enabledConnectors, plan]);
+    agentOptionsRef.current = agentOptions;
+  }, [model, githubRepo, enabledConnectors, plan, agentOptions]);
+
+  const handleAgentOptionsChange = (newOptions: AgentOptions) => {
+    setAgentOptions(newOptions);
+    if (typeof window !== "undefined") {
+      const all = loadConversations();
+      const updated = all.map((c) => (c.id === conversationId ? { ...c, agentOptions: newOptions } : c));
+      saveConversations(updated);
+    }
+  };
 
   // Reads the refs at request time (not render time), so the transport always sends
   // the latest settings without being recreated.
@@ -238,13 +303,33 @@ export function ChatPanel({
             .map((c) => ({ url: c.url, authHeader: c.authHeader })),
           githubRepo: repoRef.current,
           plan: planRef.current,
+          agentOptions: agentOptionsRef.current,
+          customInstructions:
+            typeof window !== "undefined"
+              ? window.localStorage.getItem("aro-custom-instructions") ?? undefined
+              : undefined,
+          skills: (() => {
+            if (typeof window === "undefined") return [];
+            try {
+              const raw = localStorage.getItem("aro-installed-skills");
+              const list = raw ? (JSON.parse(raw) as Record<string, unknown>[]) : [];
+              // Only what the model can use. The installed skills also hold every bundled file
+              // (up to 200 KB each), which would swell every request for nothing.
+              return list
+                .filter((s) => s.enabled !== false)
+                .map((s) => ({ name: s.name, description: s.description, skillMd: s.skillMd, enabled: true }));
+            } catch {
+              return [];
+            }
+          })(),
           };
         },
       })
   );
   /* eslint-enable react-hooks/refs */
 
-  const { messages, sendMessage, status, error, regenerate, stop } = useChat({
+  const toast = useToast();
+  const { messages, setMessages, sendMessage, status, error, regenerate, stop } = useChat({
     id: conversationId,
     messages: initialMessages,
     transport,
@@ -308,11 +393,31 @@ export function ChatPanel({
   const [input, setInput] = useState("");
   const [mcpOpen, setMcpOpen] = useState(false);
   const [repoPromptOpen, setRepoPromptOpen] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(mode === "code");
+
+  const pendingChangesCount = useMemo(() => {
+    if (mode !== "code") return 0;
+    return extractPushableFiles(messages.map(textOf)).length;
+  }, [mode, messages]);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (mode === "code" && !githubRepo && signedIn && active && isEmpty) {
+      setRepoPromptOpen(true);
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [mode, githubRepo, signedIn, active, isEmpty]);
+
   // When the current turn began, and whether it went to Bonsai (slow first reply after a nap).
   const [turn, setTurn] = useState({ startedAt: 0, bonsai: false });
 
   // Image editing: only offered to accounts allowed to use the home GPU.
-  const { allowed: canEditImages } = useHomeGpu();
+  const { allowed: canEditImages, status: gpu } = useHomeGpu();
+  const contextUsage = useMemo(() => {
+    const tokens = estimateConversationTokens(messages);
+    const limit = getModelContextLimit(model, gpu?.bonsaiContext);
+    return calculateContextUsage(tokens, limit);
+  }, [messages, model, gpu?.bonsaiContext]);
   const [attachment, setAttachment] = useState<PreparedImage | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
@@ -345,13 +450,233 @@ export function ChatPanel({
     }
   }
 
+  const trySendRef = useRef(trySend);
+  useEffect(() => {
+    trySendRef.current = trySend;
+  });
+
+  const [isSwitching, setIsSwitching] = useState(false);
+
+  // Pick up any pending message queued by auto-continuation
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const key = `aro-pending-prompt:${conversationId}`;
+    const pendingRaw = window.sessionStorage.getItem(key);
+    if (!pendingRaw) return;
+    window.sessionStorage.removeItem(key);
+    try {
+      const parsed = JSON.parse(pendingRaw);
+      if (parsed?.text) {
+        // A timer, not requestAnimationFrame: frames stop in a background tab, so a user who
+        // switched tabs while the summary loaded came back to a message that never went out.
+        window.setTimeout(() => {
+          trySendRef.current(parsed.text, parsed.image);
+        }, 0);
+      }
+    } catch {
+      // Ignore
+    }
+  }, [conversationId]);
+
+  async function autoSwitchConversation(pendingText: string, pendingImage?: PreparedImage | null) {
+    if (sendingRef.current || isStreaming || isSwitching) return;
+    sendingRef.current = true;
+    setIsSwitching(true);
+
+    try {
+      const modelRefParsed = parseModelRef(model, loadModelSource());
+
+      // 1. Fetch handoff summary via /api/chat/summary
+      let summaryText = "";
+      try {
+        const res = await fetch("/api/chat/summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages,
+            model: modelRefParsed.id,
+            modelSource: modelRefParsed.source,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          summaryText = typeof data.summary === "string" ? data.summary : "";
+        }
+      } catch {
+        // Fall back to continuing without summary if endpoint fails
+      }
+
+      // 2. Identify current conversation info
+      const allConvs = loadConversations();
+      const currentConv = allConvs.find((c) => c.id === conversationId);
+      const currentTitle = currentConv?.title || "Previous chat";
+
+      // 3. Create new conversation with same model, repo, mode
+      const newId = crypto.randomUUID();
+      const newTitle = titleFromMessage(pendingText) || "Continued chat";
+      const summaryPrefix = `Continued from ${currentTitle}`;
+      const summaryContent = summaryText
+        ? `${summaryPrefix}\n\n${summaryText}`
+        : summaryPrefix;
+
+      const handoffMessage: UIMessage = {
+        id: crypto.randomUUID(),
+        role: "system",
+        parts: [{ type: "text", text: summaryContent }],
+      };
+
+      const newConversation: Conversation = {
+        id: newId,
+        title: newTitle,
+        messages: [handoffMessage],
+        model,
+        createdAt: Date.now(),
+        githubRepo,
+        mode: currentConv?.mode,
+        continuedFrom: { id: conversationId, title: currentTitle },
+      };
+
+      // 4. Update current conversation with continuedIn link
+      let foundCurrent = false;
+      const updatedConvs = allConvs.map((c) => {
+        if (c.id === conversationId) {
+          foundCurrent = true;
+          return {
+            ...c,
+            continuedIn: { id: newId, title: newTitle },
+          };
+        }
+        return c;
+      });
+      if (!foundCurrent) {
+        updatedConvs.push({
+          id: conversationId,
+          title: currentTitle,
+          messages,
+          model,
+          createdAt: Date.now(),
+          githubRepo,
+          continuedIn: { id: newId, title: newTitle },
+        });
+      }
+      updatedConvs.push(newConversation);
+
+      // Persist to storage
+      saveConversations(updatedConvs);
+
+      // Update open tabs and set active conversation
+      const openTabs = loadOpenTabs();
+      if (!openTabs.includes(newId)) {
+        saveOpenTabs([...openTabs, newId]);
+      }
+      saveActiveId(newId);
+
+      // Store pending prompt to be automatically sent in the new conversation
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(
+          `aro-pending-prompt:${newId}`,
+          JSON.stringify({ text: pendingText, image: pendingImage })
+        );
+      }
+
+      // Reset input state in current panel
+      setInput("");
+      setAttachment(null);
+      setAttachError(null);
+
+      // Switch to new tab smoothly without page reload
+      onSelectConversation(newId);
+    } catch {
+      sendingRef.current = false;
+      setIsSwitching(false);
+    }
+  }
+
   function submit() {
-    if (!input.trim() || preparing) return;
+    if (!input.trim() || preparing || isSwitching) return;
+    const modelRefParsed = parseModelRef(model, loadModelSource());
+    const isHermes = modelRefParsed.source === "hermes";
+    if (!isHermes && contextUsage.percent >= 80 && messages.length > 0) {
+      void autoSwitchConversation(input, attachment);
+      return;
+    }
     trySend(input, attachment);
     setInput("");
     setAttachment(null);
     setAttachError(null);
   }
+
+  const handleRestoreCheckpoint = (messageIndex: number) => {
+    if (messageIndex < 0 || messageIndex >= messages.length) return;
+    const truncated = messages.slice(0, messageIndex + 1);
+    setMessages(truncated);
+    // The normal save path: it updates the app's state and, when signed in, the database.
+    // Writing localStorage directly left signed-in chats (and the page's own copy) unchanged.
+    persistRef.current(conversationId, truncated);
+    toast({ title: "Restored conversation to this checkpoint.", tone: "success" });
+  };
+
+  const handleSlashCommand = async (cmd: "plan" | "clear" | "compact" | "model" | "skills" | "new") => {
+    switch (cmd) {
+      case "plan": {
+        setPlan((prev) => {
+          const next = !prev;
+          toast({ title: next ? "Plan mode enabled" : "Plan mode disabled", tone: "info" });
+          return next;
+        });
+        break;
+      }
+      case "clear": {
+        setMessages([]);
+        persistRef.current(conversationId, []);
+        toast({ title: "Conversation cleared", tone: "info" });
+        break;
+      }
+      case "compact": {
+        if (messages.length === 0) {
+          toast({ title: "No messages to compact", tone: "info" });
+          return;
+        }
+        try {
+          toast({ title: "Compacting conversation...", tone: "info" });
+          const res = await fetch("/api/chat/summary", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages, model }),
+          });
+          if (!res.ok) throw new Error("Compaction failed");
+          const { summary } = (await res.json()) as { summary: string };
+          toast({ title: "Summary generated: creating continuation", tone: "success" });
+          void autoSwitchConversation(summary);
+        } catch {
+          toast({ title: "Failed to compact conversation", tone: "error" });
+        }
+        break;
+      }
+      case "model": {
+        const btn = document.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]');
+        btn?.click();
+        break;
+      }
+      case "skills": {
+        if (mode === "code") {
+          setWorkspaceOpen(true);
+        } else {
+          toast({ title: "Skills can be configured in the controls bar or in Coding sessions", tone: "info" });
+        }
+        break;
+      }
+      case "new": {
+        if (typeof window !== "undefined") {
+          const newConv = createConversation(model, { mode });
+          const all = loadConversations();
+          saveConversations([newConv, ...all]);
+          onSelectConversation(newConv.id);
+        }
+        break;
+      }
+    }
+  };
 
   async function attachFile(file: File | undefined) {
     if (!file || !canEditImages) return;
@@ -483,21 +808,38 @@ export function ChatPanel({
 
   const firstName = userName?.trim().split(/\s+/)[0];
   const enabledCount = enabledConnectors.filter((c) => c.enabled).length;
+  const onHermes = parseModelRef(model, loadModelSource()).source === "hermes";
   const placeholder = attachment
     ? "Describe the change you want"
-    : githubRepo
-      ? `Ask about ${githubRepo.name}, or have ARO write code`
-      : "Ask ARO to write, explain, or fix code";
+    : onHermes
+      ? "Give Hermes a task to run on your PC"
+      : mode === "code"
+        ? githubRepo
+          ? `Ask about ${githubRepo.name}, or have ARO write code`
+          : "Connect a repo or ask ARO to write code"
+        : githubRepo
+          ? `Ask about ${githubRepo.name}, or have ARO write code`
+          : "Ask ARO to write, explain, or fix code";
 
   const controls = (
     <>
+      {mode === "code" && (
+        <RepoConnect
+          value={githubRepo}
+          onChange={(repo) => onRepoChange(conversationId, repo)}
+          forceOpen={repoPromptOpen}
+          onForceOpenHandled={() => setRepoPromptOpen(false)}
+        />
+      )}
       <ModelSwitcher value={model} onChange={(m) => onModelChange(conversationId, m)} />
-      <RepoConnect
-        value={githubRepo}
-        onChange={(repo) => onRepoChange(conversationId, repo)}
-        forceOpen={repoPromptOpen}
-        onForceOpenHandled={() => setRepoPromptOpen(false)}
-      />
+      {mode !== "code" && (
+        <RepoConnect
+          value={githubRepo}
+          onChange={(repo) => onRepoChange(conversationId, repo)}
+          forceOpen={repoPromptOpen}
+          onForceOpenHandled={() => setRepoPromptOpen(false)}
+        />
+      )}
       <McpConnectors
         open={mcpOpen}
         onOpenChange={setMcpOpen}
@@ -514,6 +856,25 @@ export function ChatPanel({
         <ListChecks aria-hidden className="h-3.5 w-3.5" />
         Plan
       </button>
+      <AgentOptionsPopover options={agentOptions} onChange={handleAgentOptionsChange} />
+      <SkillsPicker onOpenSkillsTab={mode === "code" ? () => setWorkspaceOpen(true) : undefined} />
+      {mode === "code" && (
+        <button
+          type="button"
+          aria-pressed={workspaceOpen}
+          onClick={() => setWorkspaceOpen((v) => !v)}
+          title="Toggle workspace rail"
+          className={`${CHIP} ${workspaceOpen ? "border-nimbus-accent/40 bg-nimbus-accent-soft text-nimbus-accent-text hover:bg-nimbus-accent-soft hover:text-nimbus-accent-text" : ""}`}
+        >
+          <Layers aria-hidden className="h-3.5 w-3.5" />
+          Workspace
+          {pendingChangesCount > 0 && (
+            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-nimbus-accent px-1 text-[10px] font-semibold text-white">
+              {pendingChangesCount}
+            </span>
+          )}
+        </button>
+      )}
     </>
   );
 
@@ -523,15 +884,56 @@ export function ChatPanel({
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
-      className="relative isolate flex h-full min-h-0 flex-col"
+      className="relative isolate flex h-full min-h-0 flex-row overflow-hidden"
     >
-      {/* Ambient particles behind the welcome screen; fades away once the chat starts. */}
-      <AroField active={isEmpty && active} scopeRef={containerRef} />
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* Ambient particles behind the welcome screen; fades away once the chat starts. */}
+        <AroField active={isEmpty && active} scopeRef={containerRef} />
 
       {isEmpty && (
         <div className="absolute inset-x-0 top-4 z-10 flex justify-center">
           <WelcomeBanner signedIn={signedIn} repo={githubRepo} onConnectRepo={() => setRepoPromptOpen(true)} />
         </div>
+      )}
+
+      {/* Header continuation links */}
+      {(links.continuedFrom || links.continuedIn) && (
+        <header
+          role="region"
+          aria-label="Conversation continuity links"
+          className="relative z-20 flex shrink-0 items-center justify-between border-b border-nimbus-border/50 bg-nimbus-panel/60 px-4 py-2 text-[12.5px] text-nimbus-text-muted backdrop-blur-xs sm:px-6"
+        >
+          <div className="flex min-w-0 items-center gap-1.5">
+            {links.continuedFrom && (
+              <span className="flex min-w-0 items-center gap-1">
+                <span>Continued from</span>
+                <button
+                  type="button"
+                  onClick={() => onSelectConversation(links.continuedFrom!.id)}
+                  className="truncate font-medium text-nimbus-accent-text hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-nimbus-accent"
+                  aria-label={`Continued from ${links.continuedFrom.title}`}
+                >
+                  {links.continuedFrom.title}
+                </button>
+              </span>
+            )}
+          </div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            {links.continuedIn && (
+              <span className="flex min-w-0 items-center gap-1">
+                <span>Continued in</span>
+                <button
+                  type="button"
+                  onClick={() => onSelectConversation(links.continuedIn!.id)}
+                  className="truncate font-medium text-nimbus-accent-text hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-nimbus-accent"
+                  aria-label={`Continued in ${links.continuedIn.title}`}
+                >
+                  {links.continuedIn.title}
+                </button>
+              </span>
+            )}
+          </div>
+        </header>
       )}
 
       <div
@@ -548,6 +950,20 @@ export function ChatPanel({
         ) : (
           <div ref={listRef} className="mx-auto flex w-full max-w-[740px] flex-col gap-8 px-4 pb-10 pt-8 sm:px-6">
             {messages.map((message) => {
+              if (message.role === "system") {
+                const text = textOf(message);
+                return (
+                  <div
+                    key={message.id}
+                    data-message={message.id}
+                    data-role="system"
+                    className="mx-auto my-2 w-full max-w-[740px] rounded-[14px] border border-nimbus-border bg-nimbus-surface-2/60 px-4 py-3 text-[13px] leading-relaxed text-nimbus-text-muted"
+                  >
+                    <div className="whitespace-pre-wrap">{text}</div>
+                  </div>
+                );
+              }
+
               if (message.role === "user") {
                 const text = textOf(message);
                 const images = message.parts.filter(
@@ -608,6 +1024,15 @@ export function ChatPanel({
                               className="my-2 block max-h-72 w-auto max-w-full rounded-[14px] border border-nimbus-border"
                             />
                           );
+                        case "approval":
+                          return (
+                            <HermesApprovalCard
+                              key={block.key}
+                              approval={block.approval}
+                              live={isLive}
+                              permission={agentOptions.permission}
+                            />
+                          );
                         case "editImage": {
                           const p = block.part as {
                             state: string;
@@ -657,10 +1082,17 @@ export function ChatPanel({
                         text={textOf(message)}
                         showRegenerate={isLast && !isStreaming}
                         onRegenerate={retry}
+                        onRestore={() => handleRestoreCheckpoint(messages.findIndex((m) => m.id === message.id))}
                       />
                     )}
 
-                    {files.length > 0 && githubRepo && <PushCard files={files} repo={githubRepo} />}
+                    {files.length > 0 && githubRepo && (
+                      <PushCard
+                        files={files}
+                        repo={githubRepo}
+                        permission={agentOptions.permission}
+                      />
+                    )}
                   </div>
                 </div>
               );
@@ -755,17 +1187,19 @@ export function ChatPanel({
             onSubmit={submit}
             onStop={() => void stop()}
             streaming={isStreaming}
-            canSend={Boolean(input.trim()) && !preparing && !isStreaming}
+            canSend={Boolean(input.trim()) && !preparing && !isStreaming && !isSwitching}
             placeholder={placeholder}
             textareaRef={textareaRef}
             fileInputRef={fileInputRef}
             controls={controls}
             attachment={attachment}
-            preparing={preparing}
+            preparing={preparing || isSwitching}
             canAttach={Boolean(canEditImages)}
             onAttachFile={(file) => void attachFile(file)}
             onRemoveAttachment={() => setAttachment(null)}
             dragging={dragging}
+            contextUsage={contextUsage}
+            onSlashCommand={handleSlashCommand}
           />
 
           {!isEmpty && (
@@ -779,7 +1213,7 @@ export function ChatPanel({
       {isEmpty && (
         <div className="flex flex-1 flex-col pb-6 pt-6">
           <WelcomeSuggestions
-            suggestions={suggestionsFor(githubRepo)}
+            suggestions={suggestionsFor(githubRepo, mode)}
             onPick={(prompt) => trySend(prompt)}
             canEditImages={Boolean(canEditImages)}
             onPickImage={() => fileInputRef.current?.click()}
@@ -797,6 +1231,16 @@ export function ChatPanel({
             <p className="text-[12.5px] text-nimbus-text-muted">PNG, JPEG, or WebP</p>
           </div>
         </div>
+      )}
+      </div>
+
+      {mode === "code" && (
+        <WorkspaceRail
+          repo={githubRepo}
+          messages={messages}
+          open={workspaceOpen}
+          onClose={() => setWorkspaceOpen(false)}
+        />
       )}
     </div>
   );

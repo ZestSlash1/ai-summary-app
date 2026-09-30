@@ -13,6 +13,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  SquareCode,
   SquarePen,
   Trash2,
   X,
@@ -50,6 +51,7 @@ export function Sidebar({
   streamingIds,
   onSelect,
   onNewChat,
+  onNewCodeChat,
   onRename,
   onDelete,
   onOpenPalette,
@@ -63,7 +65,8 @@ export function Sidebar({
   activeIsEmpty: boolean;
   streamingIds: ReadonlySet<string>;
   onSelect: (id: string) => void;
-  onNewChat: () => void;
+  onNewChat: (mode?: "chat" | "code") => void;
+  onNewCodeChat?: () => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onOpenPalette: () => void;
@@ -78,6 +81,8 @@ export function Sidebar({
   const modKey = useModKey();
   const placed = useRef(false);
   const narrow = isDesktop && collapsed;
+  const activeConversation = conversations.find((c) => c.id === activeId);
+  const isCodeMode = activeConversation?.mode === "code";
 
   const [historyOpen, setHistoryOpen] = useState(true);
   const [searching, setSearching] = useState(false);
@@ -258,7 +263,8 @@ export function Sidebar({
 
         {/* Primary navigation */}
         <nav className="flex shrink-0 flex-col gap-0.5 px-2.5 pt-1" aria-label="Main">
-          <NavItem icon={SquarePen} label="New chat" active={activeIsEmpty} onClick={onNewChat} narrow={narrow} wiggle="tilt" />
+          <NavItem icon={SquarePen} label="New chat" active={activeIsEmpty && !isCodeMode} onClick={() => onNewChat("chat")} narrow={narrow} wiggle="tilt" />
+          <NavItem icon={SquareCode} label="Code" active={activeIsEmpty && isCodeMode} onClick={onNewCodeChat ?? (() => onNewChat("code"))} narrow={narrow} wiggle="tilt" />
           <NavItem
             icon={Search}
             label="Search"
@@ -511,6 +517,9 @@ function HistoryRow({
               : "text-nimbus-text-muted hover:bg-nimbus-surface hover:text-nimbus-text"
           }`}
         >
+          {conversation.mode === "code" && (
+            <SquareCode aria-label="Code session" className="h-3.5 w-3.5 shrink-0 text-nimbus-accent" />
+          )}
           {streaming && (
             <span aria-label="Replying" className="aro-live-dot h-1.5 w-1.5 shrink-0 rounded-full bg-nimbus-accent text-nimbus-accent" />
           )}

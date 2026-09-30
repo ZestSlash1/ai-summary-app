@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Cpu, Lock, Search, Sparkles } from "lucide-react";
+import { Bot, Check, ChevronDown, Cpu, Lock, Search, Sparkles } from "lucide-react";
 import type { ModelOption } from "@/lib/types";
 import { loadModelSource, type ModelSource } from "@/lib/storage";
 import { fetchModelCatalog } from "@/lib/models";
@@ -24,6 +24,11 @@ const BONSAI_NOTE: Record<GpuState, string> = {
   busy: "Busy with another reply or an image edit. Messages wait their turn.",
   offline: "Not answering. Turn the home PC on and start the stack.",
 };
+const HERMES_NOTE = {
+  online: "Runs real tasks on your PC: terminal, files, web, and its own memory. Asks before risky commands.",
+  offline: "Not answering. Start it in WSL with: hermes gateway",
+} as const;
+
 const STATE_DOT: Record<GpuState, string> = {
   online: "bg-nimbus-free",
   sleeping: "bg-nimbus-text-faint",
@@ -76,9 +81,14 @@ export function ModelSwitcher({
   const current = parseModelRef(value, legacySource ?? "gateway");
   const bonsaiNow = gpu ? bonsaiState(gpu) : null;
 
+  // Hermes shows up once the gateway reports it set up (online or not).
+  const hermesState = gpu?.hermes && gpu.hermes !== "unconfigured" ? gpu.hermes : null;
   const sources = useMemo<ModelSource[]>(
-    () => (homeAllowed ? ["bonsai", "gateway", "omniroute"] : ["gateway", "omniroute"]),
-    [homeAllowed]
+    () =>
+      homeAllowed
+        ? ["bonsai", ...(hermesState ? (["hermes"] as const) : []), "gateway", "omniroute"]
+        : ["gateway", "omniroute"],
+    [homeAllowed, hermesState]
   );
 
   useEffect(() => {
@@ -97,7 +107,7 @@ export function ModelSwitcher({
   // use, and stored with its source so it never depends on the old app-wide setting.
   useEffect(() => {
     if (!qualified && legacySource === null) return;
-    if (current.source === "bonsai" && homeAllowed === false) {
+    if (SOURCE_INFO[current.source].local && homeAllowed === false) {
       const gateway = catalogs.gateway?.models;
       if (gateway?.length) onChangeRef.current(toModelRef("gateway", pickDefault(gateway).id));
       return;
@@ -130,13 +140,26 @@ export function ModelSwitcher({
       out.push({ key: "local", kind: "local", title: "On your PC", note: "Bonsai runs on the owner's home PC.", rows: [], locked: true });
     } else if (catalogs.bonsai) {
       const state = bonsaiNow ?? (catalogs.bonsai.failed ? "offline" : undefined);
+      const ctxLabel = gpu?.bonsaiContext ? `${Math.round(gpu.bonsaiContext / 1024)}k context` : null;
+      const baseNote = state ? BONSAI_NOTE[state] : "Runs on your home PC. Private and free.";
+      const note = ctxLabel && state !== "offline" ? `${baseNote} · ${ctxLabel}` : baseNote;
       out.push({
         key: "local",
         kind: "local",
         title: "On your PC · Bonsai",
-        note: state ? BONSAI_NOTE[state] : "Runs on your home PC. Private and free.",
+        note,
         rows: rows("bonsai", "local", catalogs.bonsai.models),
         state,
+      });
+    }
+    if (homeAllowed && hermesState) {
+      out.push({
+        key: "agent",
+        kind: "local",
+        title: "On your PC · Hermes agent",
+        note: HERMES_NOTE[hermesState],
+        rows: rows("hermes", "local", catalogs.hermes?.models ?? []),
+        state: hermesState,
       });
     }
     const gateway = catalogs.gateway?.models ?? [];
@@ -172,7 +195,7 @@ export function ModelSwitcher({
       }
     );
     return out;
-  }, [catalogs, homeAllowed, bonsaiNow]);
+  }, [catalogs, homeAllowed, bonsaiNow, hermesState, gpu]);
 
   const visibleGroups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -191,7 +214,8 @@ export function ModelSwitcher({
   const label = entry?.name ?? (local ? SOURCE_INFO[current.source].name : (current.id.split("/").pop() ?? current.id));
   const loading = sources.some((s) => !catalogs[s]);
   const gatewayFailed = catalogs.gateway?.failed;
-  const ChipIcon = local ? Cpu : Sparkles;
+  const agent = current.source === "hermes";
+  const ChipIcon = agent ? Bot : local ? Cpu : Sparkles;
   const selectedRef = toModelRef(current.source, current.id);
   const chipTitle = `${label}: ${local ? "runs on " : entry?.free ? "free on " : "via "}${SOURCE_INFO[current.source].runs}`;
 
@@ -215,7 +239,7 @@ export function ModelSwitcher({
         <span className={`truncate ${variant === "chip" ? "max-w-[9rem]" : "flex-1 text-left"}`}>{label}</span>
         {local ? (
           <span className="rounded-[5px] bg-nimbus-accent-soft px-1.5 py-px text-[10.5px] font-medium text-nimbus-accent-text">
-            Local
+            {agent ? "Agent" : "Local"}
           </span>
         ) : entry?.free ? (
           <span className="rounded-[5px] bg-nimbus-free-soft px-1.5 py-px text-[10.5px] font-medium text-nimbus-free">Free</span>
@@ -306,7 +330,9 @@ export function ModelSwitcher({
                       }`}
                     >
                       <span className="min-w-0 flex-1 truncate">{row.model.name}</span>
-                      {row.kind === "local" && <span className="text-[11px] text-nimbus-accent-text">Local</span>}
+                      {row.kind === "local" && (
+                        <span className="text-[11px] text-nimbus-accent-text">{row.source === "hermes" ? "Agent" : "Local"}</span>
+                      )}
                       {row.kind === "free" && <span className="text-[11px] text-nimbus-free">Free</span>}
                       <Check aria-hidden className={`h-3.5 w-3.5 shrink-0 text-nimbus-accent-text ${selected ? "" : "invisible"}`} />
                     </button>

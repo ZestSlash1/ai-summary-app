@@ -1,18 +1,20 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Check, Copy, RotateCcw } from "lucide-react";
+import { Check, Copy, History, RotateCcw } from "lucide-react";
 
-/** Copy and regenerate under a reply. Visible on hover, always visible on touch. */
+/** Copy, restore, and regenerate under a reply. Visible on hover, always visible on touch. */
 export function MessageActions({
   text,
   onRegenerate,
   showRegenerate,
+  onRestore,
   meta,
 }: {
   text: string;
   onRegenerate?: () => void;
   showRegenerate?: boolean;
+  onRestore?: () => void;
   meta?: string;
 }) {
   const [copied, setCopied] = useState(false);
@@ -41,6 +43,11 @@ export function MessageActions({
       {showRegenerate && onRegenerate && (
         <ActionButton label="Regenerate" onClick={onRegenerate}>
           <RotateCcw aria-hidden className="h-3.5 w-3.5" />
+        </ActionButton>
+      )}
+      {onRestore && (
+        <ActionButton label="Restore to here" onClick={onRestore}>
+          <History aria-hidden className="h-3.5 w-3.5" />
         </ActionButton>
       )}
       {meta && <span className="ml-1.5 truncate text-[11.5px] text-nimbus-text-faint">{meta}</span>}

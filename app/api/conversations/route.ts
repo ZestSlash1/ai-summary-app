@@ -27,6 +27,7 @@ export async function GET() {
       model: row.model,
       createdAt: new Date(row.created_at).getTime(),
       githubRepo: row.github_repo ?? undefined,
+      mode: row.mode ?? "chat",
     }))
   );
 }
@@ -41,15 +42,18 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => ({}))) as {
     model?: string;
+    mode?: "chat" | "code";
+    title?: string;
   };
 
   const { data, error } = await supabase
     .from("conversations")
     .insert({
       user_id: session.githubUserId,
-      title: "New chat",
+      title: body.title || (body.mode === "code" ? "New coding session" : "New chat"),
       model: body.model || FALLBACK_MODEL,
       messages: [],
+      ...(body.mode ? { mode: body.mode } : {}),
     })
     .select()
     .single();
@@ -65,5 +69,6 @@ export async function POST(request: Request) {
     model: data.model,
     createdAt: new Date(data.created_at).getTime(),
     githubRepo: data.github_repo ?? undefined,
+    mode: data.mode ?? body.mode ?? "chat",
   });
 }

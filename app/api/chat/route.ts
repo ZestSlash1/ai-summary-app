@@ -15,7 +15,7 @@ import { auth } from '@/auth';
 import { retrieveMemory } from '@/lib/memory';
 import { getUserSkills, logSignalAndMaybePropose, messageMatchesKnownSkill } from '@/lib/skillDiscovery';
 import { fetchGatewayModels, fetchOmniRouteModels, fetchBonsaiModels } from '@/lib/modelCatalog';
-import { FALLBACK_MODEL } from '@/lib/types';
+import { FALLBACK_MODEL, type AgentOptions } from '@/lib/types';
 import { safeEvaluate } from '@/lib/calc';
 import { canUseBonsai, bonsaiDenied } from '@/lib/access';
 import { comfy, friendlyComfyError } from '@/lib/comfy';
@@ -23,6 +23,12 @@ import { extractLatestImage } from '@/lib/imageParts';
 import { createRepoTools, repoSystemPrompt } from '@/lib/repoTools';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isPublicHttpUrl } from '@/lib/safeUrl';
+import { hermesChatResponse } from '@/lib/hermesChat';
+import { pruneOldTurns } from '@/lib/historyPruning';
+import { PROMPT_OVERHEAD_TOKENS, estimateConversationTokens, getModelContextLimit } from '@/lib/tokenEstimate';
+import { fetchBonsaiContext } from '@/lib/bonsaiContext';
+import { handoffPrompt, splitSystemMessages } from '@/lib/handoff';
+import { parseModelRef, toModelRef } from '@/lib/modelRef';
 
 // Bonsai answers at about 33 tokens a second and a repo question takes several tool steps,
 // so give a turn the full five minutes Vercel allows on every plan (Fluid compute).
@@ -56,11 +62,11 @@ When you write code that belongs in a project file (not a throwaway snippet), ta
 ...
 \`\`\`
 
-Only add a path when the code is meant to be saved as a real file in the user's project — short illustrative snippets don't need one. Use tools when they give a more accurate answer than reasoning alone. Only mention capabilities you actually have.`;
+Only add a path when the code is meant to be saved as a real file in the user's project -- short illustrative snippets don't need one. Use tools when they give a more accurate answer than reasoning alone. Only mention capabilities you actually have.`;
 
 type McpConnectorInput = { url: string; authHeader?: string };
 type GithubRepoInput = { owner: string; name: string; branch: string };
-type ModelSource = 'gateway' | 'omniroute' | 'bonsai';
+type ModelSource = 'gateway' | 'omniroute' | 'bonsai' | 'hermes';
 
 let omniroute: ReturnType<typeof createOpenAICompatible> | null = null;
 let bonsai: ReturnType<typeof createOpenAICompatible> | null = null;
@@ -134,25 +140,50 @@ function textOf(message: UIMessage): string {
 
 export async function POST(request: Request) {
   const {
+    id: chatId,
     messages,
     model,
     modelSource,
     mcpConnectors,
     githubRepo,
     plan,
+    skills,
+    agentOptions,
+    customInstructions,
   }: {
+    id?: string;
     messages: UIMessage[];
     model?: string;
     modelSource?: ModelSource;
     mcpConnectors?: McpConnectorInput[];
     githubRepo?: GithubRepoInput;
     plan?: boolean;
+    skills?: { name: string; description: string; body?: string; skillMd?: string; enabled?: boolean }[];
+    agentOptions?: AgentOptions;
+    customInstructions?: string;
   } = await request.json();
 
   const session = await auth();
   // Bonsai is the owner's home GPU: refuse before doing any other work.
   if (modelSource === 'bonsai' && !canUseBonsai(session)) return bonsaiDenied(session);
   const userId = session?.githubUserId;
+
+  // Hermes runs real commands on the owner's PC: same allow list as Bonsai, and it keeps its
+  // own tools, memory, and transcript, so the turn is handed over whole.
+  if (modelSource === 'hermes') {
+    if (!canUseBonsai(session) || !userId) return bonsaiDenied(session, 'Hermes');
+    return hermesChatResponse({
+      messages,
+      chatId,
+      model,
+      githubUserId: userId,
+      repo: githubRepo,
+      plan,
+      signal: request.signal,
+      agentOptions,
+      customInstructions,
+    });
+  }
   const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
   const lastUserText = lastUserMessage ? textOf(lastUserMessage) : '';
 
@@ -208,16 +239,79 @@ export async function POST(request: Request) {
   const repoTools: ToolSet =
     githubRepo && githubToken ? createRepoTools(githubToken, githubRepo) : {};
 
+  // Skills come from the browser and their text lands in the system prompt, so they are cut down
+  // to one-line names and descriptions, a bounded count, and a bounded body. A skill written by a
+  // stranger cannot then add lines of its own to the index or bury the real instructions.
+  const oneLine = (value: unknown, max: number) =>
+    typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '';
+  const enabledSkills = (Array.isArray(skills) ? skills : [])
+    .filter((s) => s && s.enabled !== false)
+    .slice(0, 20)
+    .map((s) => ({
+      name: oneLine(s.name, 80),
+      description: oneLine(s.description, 300),
+      body: typeof s.body === 'string' ? s.body.slice(0, 60_000) : undefined,
+      skillMd: typeof s.skillMd === 'string' ? s.skillMd.slice(0, 60_000) : undefined,
+    }))
+    .filter((s) => s.name);
+  const skillTools: ToolSet =
+    enabledSkills.length > 0
+      ? {
+          loadSkill: tool({
+            description:
+              'Load the complete instructions and workflow for an available skill by name.',
+            inputSchema: z.object({
+              name: z
+                .string()
+                .describe('The exact name of the skill to load, from the available skills list.'),
+            }),
+            execute: async ({ name }) => {
+              const match = enabledSkills.find(
+                (s) => s.name.toLowerCase() === name.trim().toLowerCase()
+              );
+              if (!match) return { error: `Skill "${name}" not found.` };
+              let body = match.body;
+              if (!body && match.skillMd) {
+                const m = match.skillMd.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/);
+                body = m ? m[1].trim() : match.skillMd.trim();
+              }
+              return { name: match.name, instructions: body || match.description };
+            },
+          }),
+        }
+      : {};
+
+  const toolToggles = agentOptions?.tools;
+  const isReadonly = agentOptions?.permission === 'readonly';
+
+  const mcpToolsFiltered = toolToggles?.web !== false ? mcpToolSets : [];
+  const builtinToolsFiltered = toolToggles?.calculate !== false ? builtinTools : {};
+  const imageToolsFiltered = !isReadonly && toolToggles?.imageEdit !== false ? imageTools : {};
+  const repoToolsFiltered = toolToggles?.repo !== false ? repoTools : {};
+
   // First-party tools go last so an MCP server cannot shadow one by reusing its name.
   const tools: ToolSet = Object.assign(
     {},
-    ...mcpToolSets.filter(Boolean),
-    builtinTools,
-    imageTools,
-    repoTools
+    ...mcpToolsFiltered.filter(Boolean),
+    builtinToolsFiltered,
+    imageToolsFiltered,
+    repoToolsFiltered,
+    skillTools
   );
 
   let systemPrompt = BASE_SYSTEM_PROMPT;
+  if (enabledSkills.length > 0) {
+    systemPrompt += `\n\nAvailable skills (call loadSkill to view instructions when relevant):\n${enabledSkills
+      .map((s) => `- ${s.name}: ${s.description}`)
+      .join('\n')}`;
+  }
+  const effectiveCustom = agentOptions?.customInstructions?.trim() || customInstructions?.trim();
+  if (effectiveCustom) {
+    systemPrompt += `\n\nCustom instructions for this session:\n${effectiveCustom}`;
+  }
+  if (isReadonly) {
+    systemPrompt += '\n\nPermission mode is read-only. Do not attempt to write, edit, or push files.';
+  }
   // Say what is actually answering, so "are you Bonsai?" gets a true answer.
   const runtime =
     modelSource === 'bonsai'
@@ -264,12 +358,12 @@ export async function POST(request: Request) {
     try {
       const { approved } = await getUserSkills(userId);
       if (approved.length > 0) {
-        systemPrompt += `\n\nThis user has approved these learned skills — use them when relevant:\n${approved
+        systemPrompt += `\n\nThis user has approved these learned skills (use them when relevant):\n${approved
           .map((s) => `- ${s.name}: ${s.description}`)
           .join('\n')}`;
       }
       if (lastUserText.trim() && !messageMatchesKnownSkill(lastUserText, approved)) {
-        // Scheduled for after the response is sent — this must never add
+        // Scheduled for after the response is sent -- this must never add
         // latency to the user-visible reply.
         after(() => logSignalAndMaybePropose(userId, lastUserText));
       }
@@ -278,7 +372,7 @@ export async function POST(request: Request) {
     }
   }
 
-  // This only fires when the client sent no model at all — every normal
+  // This only fires when the client sent no model at all -- every normal
   // new-conversation path resolves a real one up front. Kept as a genuine
   // last resort: pick whatever's actually free in the live catalog instead
   // of a hardcoded id that can silently rot.
@@ -300,15 +394,63 @@ export async function POST(request: Request) {
     }
   }
 
+  const resolvedModelId = model || (await resolveDefaultModel());
+  const parsedRef = parseModelRef(resolvedModelId, modelSource || 'gateway');
+  const qualifiedModelRef = toModelRef(parsedRef.source, parsedRef.id);
+  // Bonsai's window is whatever the home server was started with, so ask the gateway for it.
+  const bonsaiContext = parsedRef.source === 'bonsai' ? await fetchBonsaiContext() : null;
+  const contextLimit = getModelContextLimit(qualifiedModelRef, bonsaiContext);
+
+  // A continued chat opens with a system-role hand-off summary. v7 rejects those in messages.
+  const { system: handoffContext, rest: chatMessages } = splitSystemMessages(messages);
+  systemPrompt += handoffPrompt(handoffContext);
+
+  const fits = (list: UIMessage[]) =>
+    estimateConversationTokens(list) + PROMPT_OVERHEAD_TOKENS + systemPrompt.length / 3.5 <= contextLimit * 0.9;
+  let processedMessages = compactHistory(chatMessages);
+  if (!fits(processedMessages)) {
+    processedMessages = pruneOldTurns(processedMessages, 2);
+    while (!fits(processedMessages) && processedMessages.length > 2) {
+      const next = pruneOldTurns(processedMessages, 2);
+      if (next.length >= processedMessages.length) break;
+      processedMessages = next;
+    }
+  }
+
+  // Effort only reaches models that take it. Sending Anthropic thinking to one that does not
+  // (Claude 3 Haiku) is an API error that fails the whole message, and providers behind
+  // Bonsai and OmniRoute ignore these keys, so for them the setting does nothing.
+  const effort = agentOptions?.effort;
+  const viaGateway = parsedRef.source === 'gateway';
+  const takesAnthropicThinking = viaGateway && /^anthropic\/claude-(opus|sonnet)-4/.test(parsedRef.id);
+  const takesOpenAIEffort = viaGateway && /^openai\/(o\d|gpt-5)/.test(parsedRef.id);
+  let providerOptions: Record<string, Record<string, string | number | boolean | Record<string, string | number>>> | undefined;
+  if (effort && takesAnthropicThinking) {
+    providerOptions = {
+      anthropic: {
+        thinking: {
+          type: 'enabled',
+          budgetTokens: effort === 'high' ? 8192 : effort === 'medium' ? 4096 : 2048,
+        },
+      },
+    };
+  } else if (effort && takesOpenAIEffort) {
+    providerOptions = { openai: { reasoningEffort: effort } };
+  }
+
+  const maxSteps = agentOptions?.maxSteps ?? 10;
+  const stopWhenConditions = [stepCountIs(maxSteps)];
+  if (tools.editImage) {
+    stopWhenConditions.push(hasToolCall('editImage'));
+  }
+
   const result = streamText({
-    model: resolveModel(model || (await resolveDefaultModel()), modelSource),
+    model: resolveModel(resolvedModelId, modelSource),
     system: systemPrompt,
-    messages: await convertToModelMessages(compactHistory(messages)),
+    messages: await convertToModelMessages(processedMessages),
     tools,
-    // The edit result is shown by the UI, so end the turn there: another model step would
-    // only compete with the image job for the GPU.
-    // Reading a repo takes a few steps (list, read, maybe search) before the answer.
-    stopWhen: [stepCountIs(10), hasToolCall('editImage')],
+    providerOptions,
+    stopWhen: stopWhenConditions,
     onFinish: async () => {
       await Promise.all(mcpClients.map((client) => client?.close()));
     },

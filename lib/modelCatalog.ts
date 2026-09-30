@@ -1,3 +1,5 @@
+import { hermesEndpoint, hermesFetch } from "./hermes";
+
 export type ModelOption = {
   id: string;
   name: string;
@@ -91,3 +93,21 @@ export async function fetchBonsaiModels(): Promise<ModelOption[]> {
   }
 }
 
+
+/** Hermes profiles the home gateway exposes. Empty when Hermes is off or not set up. */
+export async function fetchHermesModels(): Promise<ModelOption[]> {
+  const endpoint = hermesEndpoint();
+  if (!endpoint) return [];
+  try {
+    const res = await hermesFetch(endpoint, "/v1/models", { signal: AbortSignal.timeout(4000), cache: "no-store" });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { data?: { id: string }[] };
+    return (body.data ?? []).map((m) => ({
+      id: m.id,
+      name: m.id === "hermes-agent" ? "Hermes agent" : `Hermes · ${m.id}`,
+      free: true,
+    }));
+  } catch {
+    return [];
+  }
+}

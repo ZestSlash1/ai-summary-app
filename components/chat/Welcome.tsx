@@ -7,6 +7,7 @@ import {
   Bug,
   FlaskConical,
   FolderTree,
+  GitCompare,
   ImagePlus,
   Lightbulb,
   MessageSquareText,
@@ -18,7 +19,45 @@ import type { Conversation, GithubRepoLink } from "@/lib/types";
 
 export type Suggestion = { label: string; prompt: string; icon: typeof Bug };
 
-export function suggestionsFor(repo?: GithubRepoLink): Suggestion[] {
+export function suggestionsFor(repo?: GithubRepoLink, mode?: "chat" | "code"): Suggestion[] {
+  if (mode === "code") {
+    if (repo) {
+      return [
+        {
+          label: `Explore ${repo.name} structure`,
+          prompt: `Read the repository structure of ${repo.owner}/${repo.name} and summarize its key modules, entry points, and architectural flow.`,
+          icon: FolderTree,
+        },
+        {
+          label: "Fix a failing test",
+          prompt: `Look for failing tests or bugs in ${repo.owner}/${repo.name}, find the root cause, and propose a clean fix with tests.`,
+          icon: Bug,
+        },
+        {
+          label: "Review changes and diff",
+          prompt: `Review the changes and git diff in ${repo.owner}/${repo.name}, checking for edge cases, performance regressions, and style consistency.`,
+          icon: GitCompare,
+        },
+      ];
+    }
+    return [
+      {
+        label: "Read repo structure",
+        prompt: "Inspect the repository structure and explain the key folders, entry points, and data flow.",
+        icon: FolderTree,
+      },
+      {
+        label: "Fix a failing test",
+        prompt: "Help me diagnose and fix a failing test. What error message or test failure are you seeing?",
+        icon: Bug,
+      },
+      {
+        label: "Review code diff",
+        prompt: "Review a code diff or changes for potential regressions, security risks, and edge cases.",
+        icon: GitCompare,
+      },
+    ];
+  }
   if (repo) {
     return [
       {

@@ -3,7 +3,9 @@
 // Sits between the tunnel and the local model servers:
 //   /v1/*     -> llama-server (Bonsai), allowlisted paths only
 //   /comfy/*  -> ComfyUI, allowlisted paths only
-// Every request needs "Authorization: Bearer <ARO_GATEWAY_TOKEN>".
+//   /hermes/* -> Hermes Agent's API server (in WSL), allowlisted paths only
+// Every request needs "Authorization: Bearer <ARO_GATEWAY_TOKEN>". Upstreams get their own
+// keys from this process, so the tunnel token never reaches them and theirs never leave.
 // It also arbitrates the single 12 GB GPU: while an image job runs, chat requests get 503,
 // and an image job only starts once llama-server reports it is asleep (VRAM released).
 
@@ -12,6 +14,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SkillInstallError, planSkillInstall, writeSkillInstall } from './skill-install.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,6 +42,12 @@ export function loadConfig(env = {}) {
     llama: (e.LLAMA_URL || 'http://127.0.0.1:8090').replace(/\/$/, ''),
     llamaKey: e.LLAMA_API_KEY || '',
     comfy: (e.COMFY_URL || 'http://127.0.0.1:8188').replace(/\/$/, ''),
+    hermes: (e.HERMES_URL || 'http://127.0.0.1:8642').replace(/\/$/, ''),
+    // Hermes's API_SERVER_KEY. Empty means Hermes is not set up here, and /hermes/* answers 503.
+    hermesKey: e.HERMES_API_KEY || '',
+    // Where Hermes reads skills from. For Hermes in WSL that is a \\wsl.localhost\ path, not the
+    // Windows home folder. Empty means "Install to Hermes" is off and answers 503.
+    hermesSkillsDir: e.HERMES_SKILLS_DIR || '',
     // 'sleep': wait for llama-server to sleep before an image job. 'off': no GPU arbitration.
     gpuMode: e.GPU_ARBITRATION || 'sleep',
     maxBodyBytes: Number(e.MAX_BODY_BYTES || 20 * 1024 * 1024),
@@ -64,6 +73,19 @@ const COMFY_ALLOW = [
   ['POST', /^\/interrupt$/],
   ['GET', /^\/system_stats$/],
   ['GET', /^\/queue$/],
+];
+// Hermes can run terminal commands on this PC, so only what ARO needs is reachable: chat,
+// discovery, and run control (stop, answer an approval). Session history, browser control,
+// artifacts, and admin routes stay local.
+const RUN_ID = '[A-Za-z0-9_-]{1,100}';
+const HERMES_ALLOW = [
+  ['GET', /^\/v1\/models$/],
+  ['GET', /^\/v1\/capabilities$/],
+  ['POST', /^\/v1\/chat\/completions$/],
+  ['POST', /^\/v1\/runs$/],
+  ['GET', new RegExp(`^/v1/runs/${RUN_ID}$`)],
+  ['GET', new RegExp(`^/v1/runs/${RUN_ID}/events$`)],
+  ['POST', new RegExp(`^/v1/runs/${RUN_ID}/(stop|approval)$`)],
 ];
 // Chat-shaped llama routes that need the GPU (everything except listing models).
 const LLAMA_GPU = /^\/v1\/(chat\/)?completions$/;
@@ -94,6 +116,34 @@ async function getJson(url, timeoutMs = 2000, headers = {}) {
   const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), headers });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
+}
+
+function readBodyJson(req, maxBytes) {
+  return new Promise((resolve, reject) => {
+    let received = 0;
+    const chunks = [];
+    req.on('data', (c) => {
+      received += c.length;
+      if (received > maxBytes) {
+        req.destroy();
+        const err = new Error('Request too large.');
+        err.status = 413;
+        return reject(err);
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      try {
+        const text = Buffer.concat(chunks).toString('utf8');
+        resolve(text ? JSON.parse(text) : {});
+      } catch {
+        const err = new Error('Invalid JSON body.');
+        err.status = 400;
+        reject(err);
+      }
+    });
+    req.on('error', reject);
+  });
 }
 
 export function createGateway(cfg) {
@@ -128,12 +178,34 @@ export function createGateway(cfg) {
     return false;
   }
 
-  async function llamaSleeping() {
+  async function llamaProps() {
     try {
       const p = await getJson(`${cfg.llama}/props`, 2000, llamaAuth());
-      return p.is_sleeping === true;
+      return {
+        sleeping: p.is_sleeping === true,
+        context: p.default_generation_settings?.n_ctx || null,
+      };
     } catch {
-      return null; // unreachable
+      return null;
+    }
+  }
+
+  async function llamaSleeping() {
+    const p = await llamaProps();
+    return p === null ? null : p.sleeping;
+  }
+
+  function hermesAuth() {
+    return { authorization: `Bearer ${cfg.hermesKey}` };
+  }
+
+  async function hermesState() {
+    if (!cfg.hermesKey) return 'unconfigured';
+    try {
+      await getJson(`${cfg.hermes}/v1/capabilities`, 2000, hermesAuth());
+      return 'online';
+    } catch {
+      return 'offline';
     }
   }
 
@@ -253,15 +325,18 @@ export function createGateway(cfg) {
     const { pathname, search } = url;
 
     if (pathname === '/status' && req.method === 'GET') {
-      const [sleeping, comfyUp] = await Promise.all([
-        llamaSleeping(),
+      const [llamaInfo, comfyUp, hermes] = await Promise.all([
+        llamaProps(),
         getJson(`${cfg.comfy}/system_stats`, 2000).then(() => true, () => false),
+        hermesState(),
       ]);
       return json(res, 200, {
-        bonsai: sleeping === null ? 'offline' : sleeping ? 'sleeping' : state.activeLlm > 0 ? 'busy' : 'online',
+        bonsai: llamaInfo === null ? 'offline' : llamaInfo.sleeping ? 'sleeping' : state.activeLlm > 0 ? 'busy' : 'online',
+        bonsaiContext: llamaInfo?.context ?? null,
         comfy: comfyUp ? (busy() ? 'busy' : 'online') : 'offline',
         imageBusy: busy(),
         activeChats: state.activeLlm,
+        hermes,
       });
     }
 
@@ -287,6 +362,37 @@ export function createGateway(cfg) {
       };
       res.on('close', finish);
       return proxy(req, res, cfg.llama, pathname + search, llamaAuth(), finish);
+    }
+
+    // ---- Hermes Agent
+    if (pathname.startsWith('/hermes/')) {
+      const sub = pathname.slice('/hermes'.length);
+      if (!allowed(HERMES_ALLOW, req.method, sub)) return json(res, 404, { error: { message: 'Not found.' } });
+      if (!cfg.hermesKey) {
+        return json(res, 503, { error: { message: 'Hermes is not set up on this PC.', type: 'hermes_unconfigured' } });
+      }
+      return proxy(req, res, cfg.hermes, sub + search, hermesAuth());
+    }
+
+    // ---- Hermes skill installation (skill-install.mjs explains the guards)
+    if (pathname === '/hermes-skills/install' && req.method === 'POST') {
+      let body;
+      try {
+        // A skill is capped at 200 KB, so a request far beyond that is refused before parsing.
+        body = await readBodyJson(req, Math.min(cfg.maxBodyBytes, 1024 * 1024));
+      } catch (err) {
+        return json(res, err.status || 400, { error: { message: err.message } });
+      }
+      try {
+        const plan = planSkillInstall(cfg.hermesSkillsDir, body?.name, body?.files);
+        const result = writeSkillInstall(plan);
+        return json(res, 200, { ok: true, skill: body.name, replaced: result.replaced, filesCount: result.files });
+      } catch (err) {
+        if (err instanceof SkillInstallError) {
+          return json(res, err.status, { error: { message: err.message, type: err.type } });
+        }
+        throw err;
+      }
     }
 
     // ---- ComfyUI
@@ -353,6 +459,12 @@ export function createGateway(cfg) {
     });
   });
   server.state = state;
+  server.handle = (req, res) =>
+    handle(req, res).catch((err) => {
+      console.error('gateway error:', err?.message);
+      if (!res.headersSent) json(res, 500, { error: { message: 'Gateway error.' } });
+      else res.destroy();
+    });
   return server;
 }
 
@@ -361,6 +473,8 @@ if (isMain) {
   const cfg = loadConfig();
   const server = createGateway(cfg);
   server.listen(cfg.port, cfg.host, () => {
-    console.log(`ARO gateway on http://${cfg.host}:${cfg.port}  llama=${cfg.llama}  comfy=${cfg.comfy}  gpu=${cfg.gpuMode}`);
+    console.log(
+      `ARO gateway on http://${cfg.host}:${cfg.port}  llama=${cfg.llama}  comfy=${cfg.comfy}  hermes=${cfg.hermesKey ? cfg.hermes : 'off'}  gpu=${cfg.gpuMode}`,
+    );
   });
 }

@@ -5,8 +5,8 @@ import type { UIMessage } from "ai";
  * /api/conversations routes rather than localStorage. */
 
 /** Returns null specifically on failure (Supabase unreachable/unconfigured
- * in this environment) — distinct from a successful fetch that just found
- * zero conversations — so callers can fall back to localStorage instead of
+ * in this environment) -- distinct from a successful fetch that just found
+ * zero conversations -- so callers can fall back to localStorage instead of
  * silently ending up with no conversations at all. */
 export async function fetchConversations(): Promise<Conversation[] | null> {
   const res = await fetch("/api/conversations");
@@ -15,12 +15,17 @@ export async function fetchConversations(): Promise<Conversation[] | null> {
 }
 
 export async function createConversationRemote(
-  model: string
+  model: string,
+  options?: Partial<Omit<Conversation, "id" | "createdAt" | "model">>
 ): Promise<Conversation | null> {
   const res = await fetch("/api/conversations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model }),
+    body: JSON.stringify({
+      model,
+      mode: options?.mode ?? "chat",
+      title: options?.title ?? (options?.mode === "code" ? "New coding session" : "New chat"),
+    }),
   });
   if (!res.ok) return null;
   return res.json();
@@ -33,6 +38,7 @@ export async function patchConversationRemote(
     messages: UIMessage[];
     model: string;
     githubRepo: GithubRepoLink | undefined;
+    mode: "chat" | "code";
   }>
 ): Promise<void> {
   await fetch(`/api/conversations/${id}`, {

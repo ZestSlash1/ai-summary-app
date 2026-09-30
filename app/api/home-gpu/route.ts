@@ -11,7 +11,12 @@ function pick(value: unknown): GpuState {
   return STATES.includes(value as GpuState) ? (value as GpuState) : "offline";
 }
 
-const OFFLINE = { bonsai: "offline", comfy: "offline", imageBusy: false } as const;
+const OFFLINE = { bonsai: "offline", comfy: "offline", imageBusy: false, hermes: "offline" } as const;
+
+type HermesState = "online" | "offline" | "unconfigured";
+function pickHermes(value: unknown): HermesState {
+  return value === "online" || value === "unconfigured" ? value : "offline";
+}
 
 export async function GET() {
   const session = await auth();
@@ -35,8 +40,10 @@ export async function GET() {
       configured: true,
       reachable: true,
       bonsai: pick(body.bonsai),
+      bonsaiContext: typeof body.bonsaiContext === "number" ? body.bonsaiContext : null,
       comfy: pick(body.comfy),
       imageBusy: body.imageBusy === true,
+      hermes: body.hermes === undefined ? "unconfigured" : pickHermes(body.hermes),
     });
   } catch {
     // PC off, tunnel down, or bad token: report it as offline, never as a server error.

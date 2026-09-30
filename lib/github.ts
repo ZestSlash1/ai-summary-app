@@ -1,5 +1,11 @@
 const API = "https://api.github.com";
 
+/** A GitHub owner or repo name. Anything else (slashes, "?", "%2e") is refused before it can
+ * reach an API path that carries the user's token. */
+export function isSafeRepoSegment(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9._-]{1,100}$/.test(value) && value !== "." && value !== "..";
+}
+
 export class GithubApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -8,19 +14,22 @@ export class GithubApiError extends Error {
   }
 }
 
-async function gh<T>(
-  token: string,
+export async function gh<T>(
+  token: string | undefined | null,
   path: string,
   init?: RequestInit
 ): Promise<T> {
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "Content-Type": "application/json",
+    ...(init?.headers as Record<string, string>),
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
   const res = await fetch(`${API}${path}`, {
     ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
+    headers,
   });
   if (!res.ok) {
     const body = await res.text();
@@ -90,7 +99,7 @@ export async function pushFiles(
     );
     baseTreeSha = commit.tree.sha;
   } catch {
-    // Branch has no commits yet (brand-new repo) — create the first commit
+    // Branch has no commits yet (brand-new repo) -- create the first commit
     // with no parent and no base tree.
   }
 

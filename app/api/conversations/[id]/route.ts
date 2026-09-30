@@ -17,6 +17,7 @@ export async function PATCH(
     messages?: unknown;
     model?: string;
     githubRepo?: unknown;
+    mode?: "chat" | "code";
   };
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -24,6 +25,7 @@ export async function PATCH(
   if (body.messages !== undefined) update.messages = body.messages;
   if (body.model !== undefined) update.model = body.model;
   if (body.githubRepo !== undefined) update.github_repo = body.githubRepo;
+  if (body.mode !== undefined) update.mode = body.mode;
 
   const { error } = await supabase
     .from("conversations")

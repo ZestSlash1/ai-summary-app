@@ -5,7 +5,7 @@ import { ArrowUpRight, GitBranch, Loader2, RotateCw, Upload } from "lucide-react
 import { gsap, useGSAP, reducedMotion } from "@/lib/motion";
 import { useToast } from "@/components/Toaster";
 import type { PushableFile } from "@/lib/codeBlocks";
-import type { GithubRepoLink } from "@/lib/types";
+import type { AgentPermission, GithubRepoLink } from "@/lib/types";
 
 type PushState =
   | { kind: "idle" }
@@ -18,7 +18,15 @@ type PushState =
  * Pushing is always the user's click: the model can read the repo, so it must not
  * also be able to write to it on its own.
  */
-export function PushCard({ files, repo }: { files: PushableFile[]; repo: GithubRepoLink }) {
+export function PushCard({
+  files,
+  repo,
+  permission,
+}: {
+  files: PushableFile[];
+  repo: GithubRepoLink;
+  permission?: AgentPermission;
+}) {
   const [state, setState] = useState<PushState>({ kind: "idle" });
   const rootRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
@@ -112,7 +120,8 @@ export function PushCard({ files, repo }: { files: PushableFile[]; repo: GithubR
           <button
             type="button"
             onClick={push}
-            disabled={state.kind === "pushing"}
+            disabled={state.kind === "pushing" || permission === "readonly"}
+            title={permission === "readonly" ? "Pushes are disabled in read-only mode" : undefined}
             className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-nimbus-accent px-3 text-[13px] font-medium text-white shadow-[var(--nimbus-glow)] transition-[background-color,transform] duration-200 hover:bg-nimbus-accent-hover active:scale-[0.97] disabled:opacity-60"
           >
             {state.kind === "pushing" ? (
@@ -122,7 +131,13 @@ export function PushCard({ files, repo }: { files: PushableFile[]; repo: GithubR
             ) : (
               <Upload aria-hidden className="h-3.5 w-3.5" />
             )}
-            {state.kind === "pushing" ? "Pushing" : state.kind === "error" ? "Try again" : "Push"}
+            {state.kind === "pushing"
+              ? "Pushing"
+              : state.kind === "error"
+                ? "Try again"
+                : permission === "readonly"
+                  ? "Read-only"
+                  : "Push"}
           </button>
         )}
       </div>

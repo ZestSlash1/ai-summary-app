@@ -12,11 +12,17 @@ function Test-Port($port) {
 
 if (Test-Port 8090) {
     Write-Host "llama-server already running on 8090"
+    # A running server keeps the settings it started with, so a changed context size only takes
+    # effect after a restart. Say so, or the 64k change looks applied when it is not.
+    $running = Get-CimInstance Win32_Process -Filter "Name like 'llama-server%'" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($running -and $running.CommandLine -notmatch '\s-c\s+65536\b') {
+        Write-Warning "llama-server is running with a different context size, so 64k is NOT active. Run 'Stop-Process -Name llama-server', wait a few seconds, then run this script again."
+    }
 } else {
-    Write-Host "Starting llama-server (context 32768, sleeps after 20 s idle so image jobs can use the GPU) ..."
-    $env:BONSAI_CTX = "32768"
+    Write-Host "Starting llama-server (context 65536, sleeps after 20 s idle so image jobs can use the GPU) ..."
+    $env:BONSAI_CTX = "65536"
     Start-Process -FilePath powershell.exe -WindowStyle Hidden -WorkingDirectory $BonsaiDir `
-        -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', '.\scripts\start_llama_server.ps1', '--sleep-idle-seconds', '20', '--alias', 'bonsai-2-27b' `
+        -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', '.\scripts\start_llama_server.ps1', '--cache-type-k', 'q8_0', '--cache-type-v', 'q8_0', '--flash-attn', 'on', '--sleep-idle-seconds', '20', '--alias', 'bonsai-2-27b' `
         -RedirectStandardOutput "$LogDir\llama.out" -RedirectStandardError "$LogDir\llama.err"
 }
 
