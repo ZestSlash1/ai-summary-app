@@ -300,7 +300,7 @@ export function ChatPanel({
           modelSource: ref.source,
           mcpConnectors: connectorsRef.current
             .filter((c) => c.enabled)
-            .map((c) => ({ url: c.url, authHeader: c.authHeader })),
+            .map((c) => ({ name: c.name, url: c.url, authHeader: c.authHeader })),
           githubRepo: repoRef.current,
           plan: planRef.current,
           agentOptions: agentOptionsRef.current,

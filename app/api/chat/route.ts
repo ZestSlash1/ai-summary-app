@@ -23,6 +23,7 @@ import { extractLatestImage } from '@/lib/imageParts';
 import { createRepoTools, repoSystemPrompt } from '@/lib/repoTools';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isPublicHttpUrl } from '@/lib/safeUrl';
+import { mergeMcpToolSets } from '@/lib/mcp';
 import { hermesChatResponse } from '@/lib/hermesChat';
 import { pruneOldTurns } from '@/lib/historyPruning';
 import { PROMPT_OVERHEAD_TOKENS, estimateConversationTokens, getModelContextLimit } from '@/lib/tokenEstimate';
@@ -64,7 +65,7 @@ When you write code that belongs in a project file (not a throwaway snippet), ta
 
 Only add a path when the code is meant to be saved as a real file in the user's project -- short illustrative snippets don't need one. Use tools when they give a more accurate answer than reasoning alone. Only mention capabilities you actually have.`;
 
-type McpConnectorInput = { url: string; authHeader?: string };
+type McpConnectorInput = { name?: string; url: string; authHeader?: string };
 type GithubRepoInput = { owner: string; name: string; branch: string };
 type ModelSource = 'gateway' | 'omniroute' | 'bonsai' | 'hermes';
 
@@ -187,9 +188,10 @@ export async function POST(request: Request) {
   const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
   const lastUserText = lastUserMessage ? textOf(lastUserMessage) : '';
 
+  // Only public addresses: the server must not be steered at internal hosts.
+  const connectors = (mcpConnectors ?? []).filter((c) => isPublicHttpUrl(c.url));
   const mcpClients = await Promise.all(
-    // Only public addresses: the server must not be steered at internal hosts.
-    (mcpConnectors ?? []).filter((c) => isPublicHttpUrl(c.url)).map((connector) =>
+    connectors.map((connector) =>
       createMCPClient({
         transport: {
           type: 'http',
@@ -284,7 +286,10 @@ export async function POST(request: Request) {
   const toolToggles = agentOptions?.tools;
   const isReadonly = agentOptions?.permission === 'readonly';
 
-  const mcpToolsFiltered = toolToggles?.web !== false ? mcpToolSets : [];
+  const mcpToolsFiltered =
+    toolToggles?.web !== false
+      ? mergeMcpToolSets(mcpToolSets.map((tools, i) => ({ name: connectors[i].name, tools: tools ?? {} })))
+      : {};
   const builtinToolsFiltered = toolToggles?.calculate !== false ? builtinTools : {};
   const imageToolsFiltered = !isReadonly && toolToggles?.imageEdit !== false ? imageTools : {};
   const repoToolsFiltered = toolToggles?.repo !== false ? repoTools : {};
@@ -292,7 +297,7 @@ export async function POST(request: Request) {
   // First-party tools go last so an MCP server cannot shadow one by reusing its name.
   const tools: ToolSet = Object.assign(
     {},
-    ...mcpToolsFiltered.filter(Boolean),
+    mcpToolsFiltered,
     builtinToolsFiltered,
     imageToolsFiltered,
     repoToolsFiltered,

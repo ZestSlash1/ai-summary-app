@@ -44,13 +44,13 @@ export function McpConnectors({
         open={open}
         onClose={() => onOpenChange(false)}
         anchorRef={triggerRef}
-        width={320}
+        width={360}
         label="MCP connectors"
         className="p-3.5"
       >
         <p className="text-[13px] font-medium text-nimbus-text">MCP connectors</p>
-        <p className="mb-3 mt-0.5 text-[12.5px] text-nimbus-text-muted">
-          Remote tool servers the model can call in this chat.
+        <p className="mb-2 mt-0.5 text-[12.5px] text-nimbus-text-muted">
+          Tool servers the model can call. Turn on only what you use: each one is contacted with every message.
         </p>
         <McpConnectorsList onConnectorsChange={onConnectorsChange} />
       </PopoverPanel>
