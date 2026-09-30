@@ -22,6 +22,7 @@ import { HermesApprovalCard } from "./chat/HermesApproval";
 import type { HermesApproval } from "@/lib/hermesStream";
 import { Composer } from "./chat/Composer";
 import { SkillsPicker } from "./chat/SkillsPicker";
+import { AgentOptionsPopover } from "./chat/AgentOptionsPopover";
 import {
   WelcomeBanner,
   WelcomeHero,
@@ -32,7 +33,7 @@ import {
 import { CHIP } from "./ui/classes";
 import { extractPushableFiles } from "@/lib/codeBlocks";
 import type { McpConnector } from "@/lib/mcp";
-import type { Conversation, GithubRepoLink } from "@/lib/types";
+import type { AgentOptions, Conversation, GithubRepoLink } from "@/lib/types";
 import {
   loadModelSource,
   loadConversations,
@@ -254,12 +255,33 @@ export function ChatPanel({
   const connectorsRef = useRef(enabledConnectors);
   const [plan, setPlan] = useState(false);
   const planRef = useRef(plan);
+  const [agentOptions, setAgentOptions] = useState<AgentOptions>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const conv = loadConversations().find((c) => c.id === conversationId);
+      return conv?.agentOptions ?? {};
+    } catch {
+      return {};
+    }
+  });
+  const agentOptionsRef = useRef(agentOptions);
+
   useEffect(() => {
     modelRef.current = model;
     repoRef.current = githubRepo;
     connectorsRef.current = enabledConnectors;
     planRef.current = plan;
-  }, [model, githubRepo, enabledConnectors, plan]);
+    agentOptionsRef.current = agentOptions;
+  }, [model, githubRepo, enabledConnectors, plan, agentOptions]);
+
+  const handleAgentOptionsChange = (newOptions: AgentOptions) => {
+    setAgentOptions(newOptions);
+    if (typeof window !== "undefined") {
+      const all = loadConversations();
+      const updated = all.map((c) => (c.id === conversationId ? { ...c, agentOptions: newOptions } : c));
+      saveConversations(updated);
+    }
+  };
 
   // Reads the refs at request time (not render time), so the transport always sends
   // the latest settings without being recreated.
@@ -279,6 +301,11 @@ export function ChatPanel({
             .map((c) => ({ url: c.url, authHeader: c.authHeader })),
           githubRepo: repoRef.current,
           plan: planRef.current,
+          agentOptions: agentOptionsRef.current,
+          customInstructions:
+            typeof window !== "undefined"
+              ? window.localStorage.getItem("aro-custom-instructions") ?? undefined
+              : undefined,
           skills: (() => {
             if (typeof window === "undefined") return [];
             try {
@@ -747,6 +774,7 @@ export function ChatPanel({
         <ListChecks aria-hidden className="h-3.5 w-3.5" />
         Plan
       </button>
+      <AgentOptionsPopover options={agentOptions} onChange={handleAgentOptionsChange} />
       <SkillsPicker onOpenSkillsTab={mode === "code" ? () => setWorkspaceOpen(true) : undefined} />
       {mode === "code" && (
         <button
@@ -915,7 +943,14 @@ export function ChatPanel({
                             />
                           );
                         case "approval":
-                          return <HermesApprovalCard key={block.key} approval={block.approval} live={isLive} />;
+                          return (
+                            <HermesApprovalCard
+                              key={block.key}
+                              approval={block.approval}
+                              live={isLive}
+                              permission={agentOptions.permission}
+                            />
+                          );
                         case "editImage": {
                           const p = block.part as {
                             state: string;
@@ -968,7 +1003,13 @@ export function ChatPanel({
                       />
                     )}
 
-                    {files.length > 0 && githubRepo && <PushCard files={files} repo={githubRepo} />}
+                    {files.length > 0 && githubRepo && (
+                      <PushCard
+                        files={files}
+                        repo={githubRepo}
+                        permission={agentOptions.permission}
+                      />
+                    )}
                   </div>
                 </div>
               );

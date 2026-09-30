@@ -15,7 +15,7 @@ import { auth } from '@/auth';
 import { retrieveMemory } from '@/lib/memory';
 import { getUserSkills, logSignalAndMaybePropose, messageMatchesKnownSkill } from '@/lib/skillDiscovery';
 import { fetchGatewayModels, fetchOmniRouteModels, fetchBonsaiModels } from '@/lib/modelCatalog';
-import { FALLBACK_MODEL } from '@/lib/types';
+import { FALLBACK_MODEL, type AgentOptions } from '@/lib/types';
 import { safeEvaluate } from '@/lib/calc';
 import { canUseBonsai, bonsaiDenied } from '@/lib/access';
 import { comfy, friendlyComfyError } from '@/lib/comfy';
@@ -146,6 +146,8 @@ export async function POST(request: Request) {
     githubRepo,
     plan,
     skills,
+    agentOptions,
+    customInstructions,
   }: {
     id?: string;
     messages: UIMessage[];
@@ -155,6 +157,8 @@ export async function POST(request: Request) {
     githubRepo?: GithubRepoInput;
     plan?: boolean;
     skills?: { name: string; description: string; body?: string; skillMd?: string; enabled?: boolean }[];
+    agentOptions?: AgentOptions;
+    customInstructions?: string;
   } = await request.json();
 
   const session = await auth();
@@ -174,6 +178,8 @@ export async function POST(request: Request) {
       repo: githubRepo,
       plan,
       signal: request.signal,
+      agentOptions,
+      customInstructions,
     });
   }
   const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
@@ -259,13 +265,21 @@ export async function POST(request: Request) {
         }
       : {};
 
+  const toolToggles = agentOptions?.tools;
+  const isReadonly = agentOptions?.permission === 'readonly';
+
+  const mcpToolsFiltered = toolToggles?.web !== false ? mcpToolSets : [];
+  const builtinToolsFiltered = toolToggles?.calculate !== false ? builtinTools : {};
+  const imageToolsFiltered = !isReadonly && toolToggles?.imageEdit !== false ? imageTools : {};
+  const repoToolsFiltered = toolToggles?.repo !== false ? repoTools : {};
+
   // First-party tools go last so an MCP server cannot shadow one by reusing its name.
   const tools: ToolSet = Object.assign(
     {},
-    ...mcpToolSets.filter(Boolean),
-    builtinTools,
-    imageTools,
-    repoTools,
+    ...mcpToolsFiltered.filter(Boolean),
+    builtinToolsFiltered,
+    imageToolsFiltered,
+    repoToolsFiltered,
     skillTools
   );
 
@@ -274,6 +288,13 @@ export async function POST(request: Request) {
     systemPrompt += `\n\nAvailable skills (call loadSkill to view instructions when relevant):\n${enabledSkills
       .map((s) => `- ${s.name}: ${s.description}`)
       .join('\n')}`;
+  }
+  const effectiveCustom = agentOptions?.customInstructions?.trim() || customInstructions?.trim();
+  if (effectiveCustom) {
+    systemPrompt += `\n\nCustom instructions for this session:\n${effectiveCustom}`;
+  }
+  if (isReadonly) {
+    systemPrompt += '\n\nPermission mode is read-only. Do not attempt to write, edit, or push files.';
   }
   // Say what is actually answering, so "are you Bonsai?" gets a true answer.
   const runtime =
@@ -372,15 +393,32 @@ export async function POST(request: Request) {
     }
   }
 
+  const effort = agentOptions?.effort;
+  const providerOptions = effort
+    ? {
+        anthropic: {
+          thinking: {
+            type: 'enabled',
+            budgetTokens: effort === 'high' ? 8192 : effort === 'medium' ? 4096 : 2048,
+          },
+        },
+        openai: { reasoningEffort: effort },
+      }
+    : undefined;
+
+  const maxSteps = agentOptions?.maxSteps ?? 10;
+  const stopWhenConditions = [stepCountIs(maxSteps)];
+  if (tools.editImage) {
+    stopWhenConditions.push(hasToolCall('editImage'));
+  }
+
   const result = streamText({
     model: resolveModel(resolvedModelId, modelSource),
     system: systemPrompt,
     messages: await convertToModelMessages(processedMessages),
     tools,
-    // The edit result is shown by the UI, so end the turn there: another model step would
-    // only compete with the image job for the GPU.
-    // Reading a repo takes a few steps (list, read, maybe search) before the answer.
-    stopWhen: [stepCountIs(10), hasToolCall('editImage')],
+    providerOptions,
+    stopWhen: stopWhenConditions,
     onFinish: async () => {
       await Promise.all(mcpClients.map((client) => client?.close()));
     },

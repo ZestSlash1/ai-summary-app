@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
 import { gsap, useGSAP, reducedMotion } from "@/lib/motion";
 import type { HermesApproval } from "@/lib/hermesStream";
+import type { AgentPermission } from "@/lib/types";
 
 const CHOICE_LABEL: Record<string, string> = {
   once: "Allow once",
@@ -25,7 +26,15 @@ type State = { kind: "waiting" } | { kind: "sending"; choice: string } | { kind:
  * packages, touching system settings). The turn is paused until the user answers here.
  * Once the reply has ended, an unanswered request can no longer be answered.
  */
-export function HermesApprovalCard({ approval, live }: { approval: HermesApproval; live: boolean }) {
+export function HermesApprovalCard({
+  approval,
+  live,
+  permission,
+}: {
+  approval: HermesApproval;
+  live: boolean;
+  permission?: AgentPermission;
+}) {
   const [state, setState] = useState<State>({ kind: "waiting" });
   const ref = useRef<HTMLDivElement>(null);
 
@@ -51,6 +60,18 @@ export function HermesApprovalCard({ approval, live }: { approval: HermesApprova
       setState({ kind: "error", message: err instanceof Error ? err.message : "Hermes did not take the answer." });
     }
   }
+
+  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+  useEffect(() => {
+    if (live && state.kind === "waiting") {
+      if (permission === "auto") {
+        void answer("once");
+      } else if (permission === "readonly") {
+        void answer("deny");
+      }
+    }
+  }, [live, state.kind, permission, approval.runId, approval.requestId]);
+  /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   const answered = state.kind === "answered" ? state.choice : null;
   const expired = !live && state.kind !== "answered";

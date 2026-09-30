@@ -12,6 +12,24 @@ export type GithubRepoLink = {
   branch: string;
 };
 
+export type AgentEffort = "low" | "medium" | "high";
+export type AgentPermission = "ask" | "auto" | "readonly";
+
+export interface AgentToolToggles {
+  repo?: boolean;
+  web?: boolean;
+  calculate?: boolean;
+  imageEdit?: boolean;
+}
+
+export interface AgentOptions {
+  effort?: AgentEffort;
+  permission?: AgentPermission;
+  tools?: AgentToolToggles;
+  maxSteps?: number;
+  customInstructions?: string;
+}
+
 export type Conversation = {
   id: string;
   title: string;
@@ -22,6 +40,7 @@ export type Conversation = {
   mode?: "chat" | "code";
   continuedFrom?: { id: string; title: string };
   continuedIn?: { id: string; title: string };
+  agentOptions?: AgentOptions;
 };
 
 // Absolute last-resort fallback, used only when /api/models itself is

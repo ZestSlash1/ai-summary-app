@@ -58,6 +58,7 @@ export function createConversation(
     ...(options?.githubRepo ? { githubRepo: options.githubRepo } : {}),
     ...(options?.continuedFrom ? { continuedFrom: options.continuedFrom } : {}),
     ...(options?.continuedIn ? { continuedIn: options.continuedIn } : {}),
+    ...(options?.agentOptions ? { agentOptions: options.agentOptions } : {}),
   };
 }
 

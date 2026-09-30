@@ -1,6 +1,7 @@
 import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage, type UIMessageChunk } from "ai";
 import { hermesEndpoint, hermesErrorText, hermesFetch, hermesMemoryKey, hermesSessionId } from "./hermes";
 import { HermesTranslator, SseParser } from "./hermesStream";
+import type { AgentOptions } from "./types";
 
 type Repo = { owner: string; name: string; branch: string };
 
@@ -26,6 +27,8 @@ export async function hermesChatResponse({
   repo,
   plan,
   signal,
+  agentOptions,
+  customInstructions,
 }: {
   messages: UIMessage[];
   chatId: unknown;
@@ -34,6 +37,8 @@ export async function hermesChatResponse({
   repo?: Repo;
   plan?: boolean;
   signal: AbortSignal;
+  agentOptions?: AgentOptions;
+  customInstructions?: string;
 }): Promise<Response> {
   const endpoint = hermesEndpoint();
   if (!endpoint) return Response.json({ error: hermesErrorText(503) }, { status: 503 });
@@ -63,6 +68,14 @@ export async function hermesChatResponse({
     system += `\n\nThis chat started with another model. Earlier turns, for context:\n\n${excerpt}`;
   }
 
+  if (agentOptions?.permission === "readonly") {
+    system += "\n\nPermission mode is read-only. Do not modify, create, delete, or push any files.";
+  }
+  const effectiveCustom = agentOptions?.customInstructions?.trim() || customInstructions?.trim();
+  if (effectiveCustom) {
+    system += `\n\nCustom instructions for this session:\n${effectiveCustom}`;
+  }
+
   const sessionId = hermesSessionId(chatId);
   let upstream: Response;
   try {
@@ -77,6 +90,9 @@ export async function hermesChatResponse({
       body: JSON.stringify({
         model: model || "hermes-agent",
         stream: true,
+        ...(agentOptions?.effort
+          ? { model_options: { reasoning: { effort: agentOptions.effort } } }
+          : {}),
         messages: [
           { role: "system", content: system },
           {
