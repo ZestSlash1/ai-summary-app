@@ -48,9 +48,22 @@ export function iconWiggle(e: { currentTarget: HTMLElement }) {
     case "nudge":
       gsap.fromTo(icon, { x: 0 }, { keyframes: { x: [0, 2, -1, 0] }, duration: 0.45, ease: "power1.out" });
       break;
+    case "rewind":
+      // For counter-clockwise icons (regenerate, restore): a turn back and a settle.
+      gsap.fromTo(icon, { rotate: 0 }, { keyframes: { rotate: [0, -45, 6, 0] }, duration: 0.55, ease: "power1.inOut" });
+      break;
     default:
       gsap.fromTo(icon, { rotate: 0 }, { keyframes: { rotate: [0, -12, 8, 0] }, duration: 0.5, ease: "power1.inOut" });
   }
+}
+
+/** A full turn of a button's icon, to acknowledge a click whose result takes a moment (regenerate). */
+export function iconSpin(button: HTMLElement, direction: 1 | -1 = 1) {
+  if (reducedMotion()) return;
+  const icon = button.querySelector("svg");
+  if (!icon) return;
+  gsap.killTweensOf(icon);
+  gsap.fromTo(icon, { rotate: 0 }, { rotate: 360 * direction, duration: 0.7, ease: "aro", transformOrigin: "50% 50%" });
 }
 
 export { gsap, useGSAP, Flip, SplitText };

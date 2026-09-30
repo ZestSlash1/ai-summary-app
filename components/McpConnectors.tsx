@@ -5,7 +5,8 @@ import { Plug } from "lucide-react";
 import type { McpConnector } from "@/lib/mcp";
 import { McpConnectorsList } from "./McpConnectorsList";
 import { PopoverPanel } from "./Popover";
-import { CHIP } from "./ui/classes";
+import { CHIP, CHIP_LABEL } from "./ui/classes";
+import { iconWiggle } from "@/lib/motion";
 
 /** Composer chip for MCP tool servers, with the add and toggle list in a popover. */
 export function McpConnectors({
@@ -30,12 +31,15 @@ export function McpConnectors({
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={enabledCount ? `MCP connectors, ${enabledCount} on` : "MCP connectors"}
+        title="MCP connectors: tool servers the model can call"
+        data-wiggle="nudge"
+        onPointerEnter={iconWiggle}
         className={CHIP}
       >
         <Plug aria-hidden className="h-3.5 w-3.5" />
-        <span>MCP</span>
+        <span className={CHIP_LABEL}>MCP</span>
         {enabledCount > 0 && (
-          <span className="rounded-[5px] bg-nimbus-accent-soft px-1.5 text-[11px] tabular-nums text-nimbus-accent-text">
+          <span key={enabledCount} className="aro-pop-in rounded-[5px] bg-nimbus-accent-soft px-1.5 text-[11px] tabular-nums text-nimbus-accent-text">
             {enabledCount}
           </span>
         )}

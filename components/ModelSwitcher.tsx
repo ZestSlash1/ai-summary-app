@@ -11,6 +11,7 @@ import { PopoverPanel } from "./Popover";
 import { BonsaiAccessNote } from "./GpuStatus";
 import { Segmented } from "./ui/Segmented";
 import { CHIP, FIELD } from "./ui/classes";
+import { iconWiggle } from "@/lib/motion";
 
 type Catalog = { models: ModelOption[]; failed: boolean };
 type Kind = "local" | "free" | "paid";
@@ -239,6 +240,8 @@ export function ModelSwitcher({
         aria-haspopup="dialog"
         aria-label={`Model: ${label}${local ? ", local" : entry?.free ? ", free" : ""}`}
         title={chipTitle}
+        data-wiggle="pop"
+        onPointerEnter={iconWiggle}
         className={
           variant === "chip"
             ? CHIP
@@ -246,17 +249,17 @@ export function ModelSwitcher({
         }
       >
         <ChipIcon aria-hidden className="h-3.5 w-3.5 shrink-0" />
-        <span className={`truncate ${variant === "chip" ? "max-w-[9rem]" : "flex-1 text-left"}`}>{label}</span>
+        <span className={`truncate ${variant === "chip" ? "max-w-[9rem] @max-[34rem]/controls:max-w-[6.5rem]" : "flex-1 text-left"}`}>{label}</span>
         {local ? (
-          <span className="rounded-[5px] bg-nimbus-accent-soft px-1.5 py-px text-[10.5px] font-medium text-nimbus-accent-text">
+          <span className="rounded-[5px] bg-nimbus-accent-soft px-1.5 py-px text-[10.5px] font-medium text-nimbus-accent-text @max-[34rem]/controls:hidden">
             {agent ? "Agent" : "Local"}
           </span>
         ) : entry?.free ? (
-          <span className="rounded-[5px] bg-nimbus-free-soft px-1.5 py-px text-[10.5px] font-medium text-nimbus-free">Free</span>
+          <span className="rounded-[5px] bg-nimbus-free-soft px-1.5 py-px text-[10.5px] font-medium text-nimbus-free @max-[34rem]/controls:hidden">Free</span>
         ) : null}
         <ChevronDown
           aria-hidden
-          className={`h-3.5 w-3.5 shrink-0 opacity-70 transition-transform duration-300 ${open ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 shrink-0 opacity-70 transition-transform duration-300 ease-[var(--nimbus-ease)] ${open ? "rotate-180" : ""}`}
         />
       </button>
 
@@ -335,7 +338,7 @@ export function ModelSwitcher({
                         onChange(row.ref);
                         setOpen(false);
                       }}
-                      className={`mx-1 flex w-[calc(100%-0.5rem)] items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-nimbus-text transition-colors duration-150 hover:bg-nimbus-surface-2 ${
+                      className={`mx-1 flex w-[calc(100%-0.5rem)] items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-nimbus-text transition-[background-color,scale] duration-150 ease-[var(--nimbus-ease)] hover:bg-nimbus-surface-2 motion-safe:active:scale-[0.985] ${
                         selected ? "bg-nimbus-surface-2" : ""
                       }`}
                     >
@@ -344,7 +347,11 @@ export function ModelSwitcher({
                         <span className="text-[11px] text-nimbus-accent-text">{row.source === "hermes" ? "Agent" : "Local"}</span>
                       )}
                       {row.kind === "free" && <span className="text-[11px] text-nimbus-free">Free</span>}
-                      <Check aria-hidden className={`h-3.5 w-3.5 shrink-0 text-nimbus-accent-text ${selected ? "" : "invisible"}`} />
+                      <Check
+                        key={selected ? "on" : "off"}
+                        aria-hidden
+                        className={`h-3.5 w-3.5 shrink-0 text-nimbus-accent-text ${selected ? "aro-pop-in" : "invisible"}`}
+                      />
                     </button>
                   );
                 })

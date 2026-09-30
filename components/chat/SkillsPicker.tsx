@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, ExternalLink, Sparkles, X } from "lucide-react";
 import { PopoverPanel } from "@/components/Popover";
+import { CHIP, CHIP_LABEL_EXTRA, CHIP_ON } from "@/components/ui/classes";
+import { iconWiggle } from "@/lib/motion";
 import type { InstalledSkill } from "@/lib/skillSources";
 
 const STORAGE_KEY = "aro-installed-skills";
@@ -79,14 +81,14 @@ export function SkillsPicker({
         aria-label={`Skills: ${enabledCount} active`}
         onClick={() => setOpen((prev) => !prev)}
         title="Skills: augment model with specialized workflows"
-        className={`flex h-8 items-center gap-1.5 rounded-lg border border-nimbus-border bg-nimbus-surface-2 px-2.5 text-[12px] font-medium text-nimbus-text transition-[color,background-color,border-color,transform] hover:border-nimbus-border-strong hover:bg-nimbus-surface-3 active:scale-95 ${
-          enabledCount > 0 ? "border-nimbus-accent/40 bg-nimbus-accent-soft text-nimbus-accent-text hover:bg-nimbus-accent-soft hover:text-nimbus-accent-text" : ""
-        }`}
+        data-wiggle="pop"
+        onPointerEnter={iconWiggle}
+        className={`${CHIP} ${enabledCount > 0 ? CHIP_ON : ""}`}
       >
-        <Sparkles aria-hidden className="h-3.5 w-3.5 shrink-0 text-nimbus-accent" />
-        <span>Skills</span>
+        <Sparkles aria-hidden className="h-3.5 w-3.5 shrink-0" />
+        <span className={CHIP_LABEL_EXTRA}>Skills</span>
         {enabledCount > 0 && (
-          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-nimbus-accent px-1 text-[10px] font-semibold text-white">
+          <span key={enabledCount} className="aro-pop-in flex h-4 min-w-4 items-center justify-center rounded-full bg-nimbus-accent px-1 text-[10px] font-semibold text-white">
             {enabledCount}
           </span>
         )}
