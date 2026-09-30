@@ -34,7 +34,7 @@ export const FIELD =
   "w-full rounded-lg border border-nimbus-border bg-nimbus-chrome px-3 py-2 text-[16px] text-nimbus-text placeholder:text-nimbus-text-faint transition-[border-color,box-shadow] sm:text-[13px] duration-200 focus:border-nimbus-accent/60 focus:shadow-[0_0_0_3px_var(--nimbus-accent-soft)] focus:outline-none";
 
 export const BUTTON_PRIMARY =
-  "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-nimbus-accent px-3.5 text-[13px] font-medium text-white shadow-[var(--nimbus-glow)] transition-[background-color,box-shadow,scale,opacity] duration-200 ease-[var(--nimbus-ease)] hover:bg-nimbus-accent-hover hover:shadow-[0_10px_26px_-8px_rgba(19,95,235,0.9)] motion-safe:active:scale-[0.96] motion-safe:active:duration-100 active:bg-nimbus-accent-press disabled:pointer-events-none disabled:opacity-40";
+  "aro-gel inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-nimbus-accent px-3.5 text-[13px] font-medium text-white transition-[background-color,box-shadow,scale,opacity,filter] duration-200 ease-[var(--nimbus-ease)] motion-safe:active:scale-[0.96] motion-safe:active:duration-100 disabled:pointer-events-none disabled:opacity-40";
 
 export const BUTTON_SECONDARY =
   "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-nimbus-border bg-nimbus-surface px-3.5 text-[13px] font-medium text-nimbus-text transition-[background-color,border-color,scale] duration-200 ease-[var(--nimbus-ease)] hover:bg-nimbus-surface-2 hover:border-nimbus-border-strong motion-safe:active:scale-[0.96] motion-safe:active:duration-100 disabled:pointer-events-none disabled:opacity-40";

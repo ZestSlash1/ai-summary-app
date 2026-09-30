@@ -136,7 +136,7 @@ export function CommandPalette({
         role="dialog"
         aria-modal="true"
         aria-label="Command menu"
-        className="w-full max-w-[560px] overflow-hidden rounded-[16px] border border-nimbus-border-strong bg-nimbus-surface shadow-[var(--nimbus-shadow-lift)]"
+        className="aro-glass aro-glass-thick relative w-full max-w-[560px] overflow-hidden rounded-[18px] border"
       >
         <div className="flex items-center gap-2.5 border-b border-nimbus-border px-4">
           <Search aria-hidden className="h-4 w-4 shrink-0 text-nimbus-text-muted" />

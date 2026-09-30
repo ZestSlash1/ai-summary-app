@@ -1,14 +1,17 @@
 "use client";
 
-import { forwardRef } from "react";
+import { forwardRef, useId } from "react";
 
 /**
  * ARO's mark: a single-story "a" (bowl and stem) with a spark above the stem.
  * Drawn with strokes so the welcome screen can draw it on with DrawSVG.
- * Paths carry data-mark attributes for animation targets.
+ * Paths carry data-mark attributes for animation targets. With `aurora`, the strokes carry
+ * the brand light (blue into violet) and the spark turns cyan.
  */
-export const BrandMark = forwardRef<SVGSVGElement, { className?: string; strokeWidth?: number }>(
-  function BrandMark({ className, strokeWidth = 2.6 }, ref) {
+export const BrandMark = forwardRef<SVGSVGElement, { className?: string; strokeWidth?: number; aurora?: boolean }>(
+  function BrandMark({ className, strokeWidth = 2.6, aurora = false }, ref) {
+    const gradientId = `aro-mark-${useId().replace(/[^a-zA-Z0-9-]/g, "")}`;
+    const stroke = aurora ? `url(#${gradientId})` : "currentColor";
     return (
       <svg
         ref={ref}
@@ -17,12 +20,20 @@ export const BrandMark = forwardRef<SVGSVGElement, { className?: string; strokeW
         className={className}
         aria-hidden="true"
       >
+        {aurora && (
+          <defs>
+            <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1="6" y1="27" x2="26" y2="9">
+              <stop offset="0" stopColor="var(--aro-aurora-1)" />
+              <stop offset="1" stopColor="var(--aro-aurora-2)" />
+            </linearGradient>
+          </defs>
+        )}
         <circle
           data-mark="bowl"
           cx="14.5"
           cy="17.5"
           r="7"
-          stroke="currentColor"
+          stroke={stroke}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           transform="rotate(-90 14.5 17.5)"
@@ -30,11 +41,11 @@ export const BrandMark = forwardRef<SVGSVGElement, { className?: string; strokeW
         <path
           data-mark="stem"
           d="M21.5 12v12.5"
-          stroke="currentColor"
+          stroke={stroke}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
         />
-        <circle data-mark="spark" cx="25.5" cy="6.5" r="2.3" fill="var(--nimbus-accent)" />
+        <circle data-mark="spark" cx="25.5" cy="6.5" r="2.3" fill={aurora ? "var(--aro-aurora-3)" : "var(--nimbus-accent)"} />
       </svg>
     );
   }
@@ -44,7 +55,7 @@ export const BrandMark = forwardRef<SVGSVGElement, { className?: string; strokeW
 export function BrandTile({ className = "h-7 w-7" }: { className?: string }) {
   return (
     <span
-      className={`relative flex shrink-0 items-center justify-center rounded-[8px] bg-nimbus-accent text-white shadow-[var(--nimbus-glow)] ${className}`}
+      className={`aro-gel relative flex shrink-0 items-center justify-center rounded-[8px] bg-nimbus-accent text-white ${className}`}
     >
       <svg viewBox="0 0 32 32" fill="none" className="h-[70%] w-[70%]" aria-hidden="true">
         <circle cx="14.5" cy="17.5" r="7" stroke="currentColor" strokeWidth="3" />
@@ -60,7 +71,7 @@ export function AssistantAvatar({ live = false }: { live?: boolean }) {
   return (
     <span
       data-live={live || undefined}
-      className="aro-avatar flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-nimbus-border bg-nimbus-surface text-nimbus-text"
+      className="aro-avatar flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent text-nimbus-text [background:linear-gradient(var(--nimbus-surface),var(--nimbus-surface))_padding-box,linear-gradient(135deg,var(--aro-aurora-1),var(--aro-aurora-2)_55%,var(--aro-aurora-3))_border-box]"
     >
       <BrandMark className="h-[17px] w-[17px]" strokeWidth={2.8} />
     </span>

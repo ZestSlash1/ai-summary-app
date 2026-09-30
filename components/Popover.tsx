@@ -167,7 +167,7 @@ export function PopoverPanel({
         aria-label={label}
         aria-hidden={!open}
         style={HIDDEN_STYLE}
-        className={`nimbus-glass fixed z-[59] flex flex-col overflow-y-auto overscroll-contain rounded-[14px] border border-nimbus-border-strong bg-nimbus-surface/95 text-nimbus-text shadow-[var(--nimbus-shadow-lift)] data-[sheet=true]:rounded-[18px] data-[sheet=true]:pb-[max(0.5rem,env(safe-area-inset-bottom))] ${className}`}
+        className={`aro-glass aro-glass-thick fixed z-[59] flex flex-col overflow-y-auto overscroll-contain rounded-[16px] border text-nimbus-text data-[sheet=true]:rounded-[22px] data-[sheet=true]:pb-[max(0.5rem,env(safe-area-inset-bottom))] ${className}`}
       >
         <span aria-hidden className="mx-auto mb-1 mt-2 hidden h-1 w-9 shrink-0 rounded-full bg-nimbus-border-strong [[data-sheet=true]>&]:block" />
         {children}
