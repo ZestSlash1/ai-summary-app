@@ -1,5 +1,11 @@
 const API = "https://api.github.com";
 
+/** A GitHub owner or repo name. Anything else (slashes, "?", "%2e") is refused before it can
+ * reach an API path that carries the user's token. */
+export function isSafeRepoSegment(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9._-]{1,100}$/.test(value) && value !== "." && value !== "..";
+}
+
 export class GithubApiError extends Error {
   status: number;
   constructor(message: string, status: number) {

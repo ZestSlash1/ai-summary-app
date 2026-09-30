@@ -188,9 +188,19 @@ export default function Home() {
       if (newConversation) {
         updateConversations((prev) => (prev.some((c) => c.id === id) ? prev : [...prev, newConversation]));
       } else if (!conversationsRef.current?.some((c) => c.id === id)) {
-        const stored = loadConversations();
-        if (stored.some((c) => c.id === id)) {
-          setConversations(stored);
+        // A continued chat is written to storage by the chat panel. Add just that one to the
+        // list (replacing the list would drop every other chat for a signed-in user), and copy
+        // the "continued in" link onto the chat it came from, or the next save loses it.
+        const found = loadConversations().find((c) => c.id === id);
+        if (found) {
+          updateConversations((prev) => {
+            if (prev.some((c) => c.id === id)) return prev;
+            const from = found.continuedFrom?.id;
+            return [
+              ...prev.map((c) => (c.id === from ? { ...c, continuedIn: { id: found.id, title: found.title } } : c)),
+              found,
+            ];
+          });
         }
       }
       setActiveId(id);

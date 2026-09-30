@@ -11,17 +11,10 @@
 
 import http from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import fs, { readFileSync } from 'node:fs';
-import os from 'node:os';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-const MAX_SKILL_TOTAL_BYTES = 200 * 1024;
-const SKILL_BINARY_EXTENSIONS = new Set([
-  'png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'svg', 'woff', 'woff2', 'ttf',
-  'eot', 'mp4', 'mov', 'webm', 'mp3', 'wav', 'zip', 'gz', 'tar', 'pdf',
-  'exe', 'dll', 'so', 'dylib', 'bin', 'iso', 'wasm', 'pyc', 'class', 'lock',
-]);
+import { SkillInstallError, planSkillInstall, writeSkillInstall } from './skill-install.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -52,6 +45,9 @@ export function loadConfig(env = {}) {
     hermes: (e.HERMES_URL || 'http://127.0.0.1:8642').replace(/\/$/, ''),
     // Hermes's API_SERVER_KEY. Empty means Hermes is not set up here, and /hermes/* answers 503.
     hermesKey: e.HERMES_API_KEY || '',
+    // Where Hermes reads skills from. For Hermes in WSL that is a \\wsl.localhost\ path, not the
+    // Windows home folder. Empty means "Install to Hermes" is off and answers 503.
+    hermesSkillsDir: e.HERMES_SKILLS_DIR || '',
     // 'sleep': wait for llama-server to sleep before an image job. 'off': no GPU arbitration.
     gpuMode: e.GPU_ARBITRATION || 'sleep',
     maxBodyBytes: Number(e.MAX_BODY_BYTES || 20 * 1024 * 1024),
@@ -378,86 +374,25 @@ export function createGateway(cfg) {
       return proxy(req, res, cfg.hermes, sub + search, hermesAuth());
     }
 
-    // ---- Hermes Skill Installation: allowlist route to write into ~/.hermes/skills
+    // ---- Hermes skill installation (skill-install.mjs explains the guards)
     if (pathname === '/hermes-skills/install' && req.method === 'POST') {
       let body;
       try {
-        body = await readBodyJson(req, cfg.maxBodyBytes);
+        // A skill is capped at 200 KB, so a request far beyond that is refused before parsing.
+        body = await readBodyJson(req, Math.min(cfg.maxBodyBytes, 1024 * 1024));
       } catch (err) {
         return json(res, err.status || 400, { error: { message: err.message } });
       }
-
-      const { name, files } = body || {};
-      if (!name || typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name)) {
-        return json(res, 400, {
-          error: { message: 'Invalid or missing skill name. Only alphanumeric, dashes, and underscores are allowed.' },
-        });
-      }
-
-      if (!files || typeof files !== 'object' || Array.isArray(files) || Object.keys(files).length === 0) {
-        return json(res, 400, { error: { message: 'Missing or empty files object.' } });
-      }
-
-      let totalBytes = 0;
-      const targetDir = path.join(os.homedir(), '.hermes', 'skills', name);
-      const normalizedTargetDir = path.resolve(targetDir);
-
-      for (const [relPath, content] of Object.entries(files)) {
-        if (!relPath || typeof relPath !== 'string') {
-          return json(res, 400, { error: { message: 'Invalid file path in files.' } });
-        }
-        const normalizedRel = relPath.replace(/\\/g, '/');
-        if (
-          normalizedRel.startsWith('/') ||
-          normalizedRel.includes('../') ||
-          normalizedRel.includes('/..') ||
-          normalizedRel === '..'
-        ) {
-          return json(res, 400, { error: { message: `Path traversal detected in file: ${relPath}` } });
-        }
-
-        const ext = normalizedRel.split('.').pop()?.toLowerCase() ?? '';
-        if (SKILL_BINARY_EXTENSIONS.has(ext)) {
-          return json(res, 400, { error: { message: `Binary extension not allowed: ${relPath}` } });
-        }
-
-        if (typeof content !== 'string') {
-          return json(res, 400, { error: { message: `File content must be text string: ${relPath}` } });
-        }
-
-        if (content.includes('\0')) {
-          return json(res, 400, { error: { message: `Binary NUL byte detected in: ${relPath}` } });
-        }
-
-        const byteSize = Buffer.byteLength(content, 'utf8');
-        totalBytes += byteSize;
-        if (totalBytes > MAX_SKILL_TOTAL_BYTES) {
-          return json(res, 413, {
-            error: { message: `Total skill size exceeds 200 KB limit (${totalBytes} bytes).` },
-          });
-        }
-      }
-
       try {
-        fs.mkdirSync(normalizedTargetDir, { recursive: true });
-        for (const [relPath, content] of Object.entries(files)) {
-          const dest = path.resolve(normalizedTargetDir, relPath);
-          if (!dest.startsWith(normalizedTargetDir + path.sep) && dest !== normalizedTargetDir) {
-            return json(res, 400, { error: { message: `Invalid destination path for file: ${relPath}` } });
-          }
-          fs.mkdirSync(path.dirname(dest), { recursive: true });
-          fs.writeFileSync(dest, content, 'utf8');
-        }
+        const plan = planSkillInstall(cfg.hermesSkillsDir, body?.name, body?.files);
+        const result = writeSkillInstall(plan);
+        return json(res, 200, { ok: true, skill: body.name, replaced: result.replaced, filesCount: result.files });
       } catch (err) {
-        return json(res, 500, { error: { message: `Failed to write skill files: ${err.message}` } });
+        if (err instanceof SkillInstallError) {
+          return json(res, err.status, { error: { message: err.message, type: err.type } });
+        }
+        throw err;
       }
-
-      return json(res, 200, {
-        ok: true,
-        skill: name,
-        path: normalizedTargetDir,
-        filesCount: Object.keys(files).length,
-      });
     }
 
     // ---- ComfyUI

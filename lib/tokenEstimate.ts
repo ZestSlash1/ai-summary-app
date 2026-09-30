@@ -5,6 +5,18 @@ export function estimateTokensFromText(text: string): number {
   return Math.ceil(text.length / 3.5);
 }
 
+function jsonLength(value: unknown): number {
+  if (value === undefined || value === null) return 0;
+  try {
+    return JSON.stringify(value).length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Tokens the system prompt, tool schemas, and skills index add on top of the messages. */
+export const PROMPT_OVERHEAD_TOKENS = 3000;
+
 export function estimateMessageTokens(message: UIMessage): number {
   let charCount = 0;
   const msg = message as unknown as { content?: string };
@@ -19,10 +31,18 @@ export function estimateMessageTokens(message: UIMessage): number {
         const text = r.reasoning || r.text;
         if (text) charCount += text.length;
       }
-      if (part.type === "tool-invocation") {
-        const inv = (part as unknown as { toolInvocation?: { args?: unknown; result?: unknown } }).toolInvocation;
-        if (inv?.args) charCount += JSON.stringify(inv.args).length;
-        if (inv?.result) charCount += JSON.stringify(inv.result).length;
+      // AI SDK v7 tool parts: "tool-<name>" or "dynamic-tool", with input and output. File reads
+      // from the repo tools are the biggest thing in a coding chat, so they must be counted.
+      if (part.type.startsWith("tool-") || part.type === "dynamic-tool") {
+        const t = part as unknown as {
+          input?: unknown;
+          output?: unknown;
+          errorText?: string;
+          toolInvocation?: { args?: unknown; result?: unknown };
+        };
+        charCount += jsonLength(t.input) + jsonLength(t.output) + (t.errorText?.length ?? 0);
+        // Older saved chats used the v4 shape.
+        charCount += jsonLength(t.toolInvocation?.args) + jsonLength(t.toolInvocation?.result);
       }
     }
   }
@@ -40,9 +60,13 @@ export function estimateConversationTokens(messages: UIMessage[]): number {
   return messages.reduce((acc, m) => acc + estimateMessageTokens(m), 0);
 }
 
+/** What Bonsai ran with before 64k was tried. When the gateway has not reported the real
+ * window, assume the small one: guessing high lets a prompt overflow llama-server. */
+export const BONSAI_SAFE_CONTEXT = 32768;
+
 export function getModelContextLimit(modelRef: string, bonsaiContext?: number | null): number {
   if (modelRef.startsWith("bonsai::")) {
-    return bonsaiContext && bonsaiContext > 0 ? bonsaiContext : 65536;
+    return bonsaiContext && bonsaiContext > 0 ? bonsaiContext : BONSAI_SAFE_CONTEXT;
   }
   return 131072; // default 128k
 }

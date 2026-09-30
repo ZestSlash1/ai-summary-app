@@ -25,7 +25,9 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { isPublicHttpUrl } from '@/lib/safeUrl';
 import { hermesChatResponse } from '@/lib/hermesChat';
 import { pruneOldTurns } from '@/lib/historyPruning';
-import { estimateConversationTokens, getModelContextLimit } from '@/lib/tokenEstimate';
+import { PROMPT_OVERHEAD_TOKENS, estimateConversationTokens, getModelContextLimit } from '@/lib/tokenEstimate';
+import { fetchBonsaiContext } from '@/lib/bonsaiContext';
+import { handoffPrompt, splitSystemMessages } from '@/lib/handoff';
 import { parseModelRef, toModelRef } from '@/lib/modelRef';
 
 // Bonsai answers at about 33 tokens a second and a repo question takes several tool steps,
@@ -237,7 +239,21 @@ export async function POST(request: Request) {
   const repoTools: ToolSet =
     githubRepo && githubToken ? createRepoTools(githubToken, githubRepo) : {};
 
-  const enabledSkills = (skills ?? []).filter((s) => s.enabled !== false);
+  // Skills come from the browser and their text lands in the system prompt, so they are cut down
+  // to one-line names and descriptions, a bounded count, and a bounded body. A skill written by a
+  // stranger cannot then add lines of its own to the index or bury the real instructions.
+  const oneLine = (value: unknown, max: number) =>
+    typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '';
+  const enabledSkills = (Array.isArray(skills) ? skills : [])
+    .filter((s) => s && s.enabled !== false)
+    .slice(0, 20)
+    .map((s) => ({
+      name: oneLine(s.name, 80),
+      description: oneLine(s.description, 300),
+      body: typeof s.body === 'string' ? s.body.slice(0, 60_000) : undefined,
+      skillMd: typeof s.skillMd === 'string' ? s.skillMd.slice(0, 60_000) : undefined,
+    }))
+    .filter((s) => s.name);
   const skillTools: ToolSet =
     enabledSkills.length > 0
       ? {
@@ -381,30 +397,46 @@ export async function POST(request: Request) {
   const resolvedModelId = model || (await resolveDefaultModel());
   const parsedRef = parseModelRef(resolvedModelId, modelSource || 'gateway');
   const qualifiedModelRef = toModelRef(parsedRef.source, parsedRef.id);
-  const contextLimit = getModelContextLimit(qualifiedModelRef);
+  // Bonsai's window is whatever the home server was started with, so ask the gateway for it.
+  const bonsaiContext = parsedRef.source === 'bonsai' ? await fetchBonsaiContext() : null;
+  const contextLimit = getModelContextLimit(qualifiedModelRef, bonsaiContext);
 
-  let processedMessages = compactHistory(messages);
-  if (estimateConversationTokens(processedMessages) > contextLimit * 0.9) {
+  // A continued chat opens with a system-role hand-off summary. v7 rejects those in messages.
+  const { system: handoffContext, rest: chatMessages } = splitSystemMessages(messages);
+  systemPrompt += handoffPrompt(handoffContext);
+
+  const fits = (list: UIMessage[]) =>
+    estimateConversationTokens(list) + PROMPT_OVERHEAD_TOKENS + systemPrompt.length / 3.5 <= contextLimit * 0.9;
+  let processedMessages = compactHistory(chatMessages);
+  if (!fits(processedMessages)) {
     processedMessages = pruneOldTurns(processedMessages, 2);
-    while (estimateConversationTokens(processedMessages) > contextLimit * 0.9 && processedMessages.length > 2) {
+    while (!fits(processedMessages) && processedMessages.length > 2) {
       const next = pruneOldTurns(processedMessages, 2);
       if (next.length >= processedMessages.length) break;
       processedMessages = next;
     }
   }
 
+  // Effort only reaches models that take it. Sending Anthropic thinking to one that does not
+  // (Claude 3 Haiku) is an API error that fails the whole message, and providers behind
+  // Bonsai and OmniRoute ignore these keys, so for them the setting does nothing.
   const effort = agentOptions?.effort;
-  const providerOptions = effort
-    ? {
-        anthropic: {
-          thinking: {
-            type: 'enabled',
-            budgetTokens: effort === 'high' ? 8192 : effort === 'medium' ? 4096 : 2048,
-          },
+  const viaGateway = parsedRef.source === 'gateway';
+  const takesAnthropicThinking = viaGateway && /^anthropic\/claude-(opus|sonnet)-4/.test(parsedRef.id);
+  const takesOpenAIEffort = viaGateway && /^openai\/(o\d|gpt-5)/.test(parsedRef.id);
+  let providerOptions: Record<string, Record<string, string | number | boolean | Record<string, string | number>>> | undefined;
+  if (effort && takesAnthropicThinking) {
+    providerOptions = {
+      anthropic: {
+        thinking: {
+          type: 'enabled',
+          budgetTokens: effort === 'high' ? 8192 : effort === 'medium' ? 4096 : 2048,
         },
-        openai: { reasoningEffort: effort },
-      }
-    : undefined;
+      },
+    };
+  } else if (effort && takesOpenAIEffort) {
+    providerOptions = { openai: { reasoningEffort: effort } };
+  }
 
   const maxSteps = agentOptions?.maxSteps ?? 10;
   const stopWhenConditions = [stepCountIs(maxSteps)];

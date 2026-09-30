@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { listRepoTree } from "@/lib/github";
+import { isSafeRepoSegment, listRepoTree } from "@/lib/github";
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -14,6 +14,9 @@ export async function GET(request: Request) {
 
   if (!owner || !repo || !branch) {
     return Response.json({ error: "Missing owner, repo, or branch parameter." }, { status: 400 });
+  }
+  if (!isSafeRepoSegment(owner) || !isSafeRepoSegment(repo)) {
+    return Response.json({ error: "Invalid owner or repo." }, { status: 400 });
   }
 
   try {
@@ -41,6 +44,9 @@ export async function POST(request: Request) {
 
   if (!owner || !repo || !branch) {
     return Response.json({ error: "Missing owner, repo, or branch." }, { status: 400 });
+  }
+  if (!isSafeRepoSegment(owner) || !isSafeRepoSegment(repo)) {
+    return Response.json({ error: "Invalid owner or repo." }, { status: 400 });
   }
 
   try {

@@ -14,6 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { gsap, reducedMotion } from "@/lib/motion";
+import { useToast } from "@/components/Toaster";
+import { useHomeGpu } from "@/lib/useHomeGpu";
 import {
   CURATED_SKILL_SOURCES,
   type CatalogSkill,
@@ -123,6 +125,10 @@ function InstallButton({
 }
 
 export function SkillsTab() {
+  const toast = useToast();
+  // Only the owner, with Hermes set up on the home PC, can copy a skill into Hermes.
+  const { allowed: homeAllowed, status: homeStatus } = useHomeGpu();
+  const hermesReady = homeAllowed === true && !!homeStatus?.hermes && homeStatus.hermes !== "unconfigured";
   const [installed, setInstalled] = useState<InstalledSkill[]>([]);
   const [catalog, setCatalog] = useState<CatalogSkill[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -252,19 +258,25 @@ export function SkillsTab() {
       saveLocalSkills(updated);
       setInstalled(updated);
 
-      // Invoke gateway POST /hermes-skills/install using slugified safeId matching /^[a-zA-Z0-9_-]{1,64}$/
-      const safeId = slugifySafeId(newSkill.id || newSkill.name);
-      try {
-        await fetch("http://127.0.0.1:8787/hermes-skills/install", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: safeId,
-            files: newSkill.files,
-          }),
-        });
-      } catch {
-        // Non-blocking: gateway installation optional when offline
+      // Copy into Hermes through the server (owner-only). The skill is installed here either
+      // way; this only reports whether Hermes got it too.
+      if (hermesReady) {
+        const safeId = slugifySafeId(newSkill.id || newSkill.name);
+        try {
+          const hermesRes = await fetch("/api/hermes/skills", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: safeId, files: newSkill.files }),
+          });
+          const hermesBody = (await hermesRes.json().catch(() => ({}))) as { error?: string; replaced?: boolean };
+          if (hermesRes.ok) {
+            toast({ tone: "success", title: hermesBody.replaced ? "Updated in Hermes" : "Also installed in Hermes" });
+          } else {
+            toast({ tone: "error", title: "Installed here, but not in Hermes", description: hermesBody.error });
+          }
+        } catch {
+          toast({ tone: "error", title: "Installed here, but not in Hermes", description: "The home PC did not answer." });
+        }
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to install skill.");
