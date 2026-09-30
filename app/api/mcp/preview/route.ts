@@ -1,5 +1,6 @@
 import { createMCPClient } from "@ai-sdk/mcp";
 import { isPublicHttpUrl } from "@/lib/safeUrl";
+import { describeMcpError } from "@/lib/mcp";
 
 export async function POST(request: Request) {
   const { url, authHeader } = (await request.json()) as {
@@ -35,12 +36,7 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     return Response.json(
-      {
-        error:
-          err instanceof Error
-            ? `Couldn't connect: ${err.message}`
-            : "Couldn't connect to that MCP server.",
-      },
+      { error: describeMcpError(err, { sentKey: Boolean(authHeader?.trim()) }) },
       { status: 502 }
     );
   } finally {

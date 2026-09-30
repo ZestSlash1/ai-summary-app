@@ -217,7 +217,7 @@ export default function SettingsPage() {
             <GpuStatusPanel />
           </Section>
 
-          <Section id="connectors" title="MCP connectors" description="Remote tool servers the model can call. Toggle them per browser.">
+          <Section id="connectors" title="MCP connectors" description="Tool servers the model can call, saved in this browser. Each one you turn on is contacted with every message.">
             <Card>
               <McpConnectorsList />
             </Card>
