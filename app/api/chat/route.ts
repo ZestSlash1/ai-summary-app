@@ -20,8 +20,11 @@ import { safeEvaluate } from '@/lib/calc';
 import { canUseBonsai, bonsaiDenied } from '@/lib/access';
 import { comfy, friendlyComfyError } from '@/lib/comfy';
 import { extractLatestImage } from '@/lib/imageParts';
+import { createRepoTools, repoSystemPrompt } from '@/lib/repoTools';
 
-export const maxDuration = 60;
+// Bonsai answers at about 33 tokens a second and a repo question takes several tool steps,
+// so give a turn the full five minutes Vercel allows on every plan (Fluid compute).
+export const maxDuration = 300;
 
 const builtinTools = {
   getCurrentTime: tool({
@@ -106,12 +109,14 @@ export async function POST(request: Request) {
     modelSource,
     mcpConnectors,
     githubRepo,
+    plan,
   }: {
     messages: UIMessage[];
     model?: string;
     modelSource?: ModelSource;
     mcpConnectors?: McpConnectorInput[];
     githubRepo?: GithubRepoInput;
+    plan?: boolean;
   } = await request.json();
 
   const session = await auth();
@@ -167,14 +172,26 @@ export async function POST(request: Request) {
       }
     : {};
 
+  // The linked repo is read with the user's own GitHub token, so it sees exactly what they can.
+  const githubToken = session?.githubAccessToken;
+  const repoTools: ToolSet =
+    githubRepo && githubToken ? createRepoTools(githubToken, githubRepo) : {};
+
+  // First-party tools go last so an MCP server cannot shadow one by reusing its name.
   const tools: ToolSet = Object.assign(
     {},
+    ...mcpToolSets.filter(Boolean),
     builtinTools,
     imageTools,
-    ...mcpToolSets.filter(Boolean)
+    repoTools
   );
 
   let systemPrompt = BASE_SYSTEM_PROMPT;
+  if (githubRepo) systemPrompt += repoSystemPrompt(githubRepo, Boolean(githubToken));
+  if (plan) {
+    systemPrompt +=
+      '\n\nPlan mode is on. Start your answer with a short numbered plan (three to six steps) under a "Plan" heading, then carry it out.';
+  }
   if (attachedImage) {
     systemPrompt +=
       '\n\nThe user attached an image. If they want it changed, call editImage once with a clear instruction. ' +
@@ -251,7 +268,8 @@ export async function POST(request: Request) {
     tools,
     // The edit result is shown by the UI, so end the turn there: another model step would
     // only compete with the image job for the GPU.
-    stopWhen: [stepCountIs(5), hasToolCall('editImage')],
+    // Reading a repo takes a few steps (list, read, maybe search) before the answer.
+    stopWhen: [stepCountIs(10), hasToolCall('editImage')],
     onFinish: async () => {
       await Promise.all(mcpClients.map((client) => client?.close()));
     },
