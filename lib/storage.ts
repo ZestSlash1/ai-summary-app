@@ -11,7 +11,12 @@ export function loadConversations(): Conversation[] {
     const raw = window.localStorage.getItem(CONVERSATIONS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed)
+      ? parsed.map((c: Conversation) => ({
+          ...c,
+          mode: c.mode ?? "chat",
+        }))
+      : [];
   } catch {
     return [];
   }
@@ -45,12 +50,12 @@ export function createConversation(
 ): Conversation {
   return {
     id: crypto.randomUUID(),
-    title: options?.title ?? "New chat",
+    title: options?.title ?? (options?.mode === "code" ? "New coding session" : "New chat"),
     messages: options?.messages ?? [],
     model,
     createdAt: Date.now(),
+    mode: options?.mode ?? "chat",
     ...(options?.githubRepo ? { githubRepo: options.githubRepo } : {}),
-    ...(options?.mode ? { mode: options.mode } : {}),
     ...(options?.continuedFrom ? { continuedFrom: options.continuedFrom } : {}),
     ...(options?.continuedIn ? { continuedIn: options.continuedIn } : {}),
   };
@@ -58,11 +63,19 @@ export function createConversation(
 
 export type ModelSource = "gateway" | "omniroute" | "bonsai" | "hermes";
 
+export function getDefaultModelKey(mode?: "chat" | "code"): string {
+  return mode === "code" ? "aro-default-model:code" : "aro-default-model";
+}
+
 /** The model new chats start with, as a "source::id" ref, or null if the user never chose one.
  * The old key held a bare Gateway id, so it still counts as a Gateway default. */
-export function loadDefaultModelRef(): string | null {
+export function loadDefaultModelRef(mode?: "chat" | "code"): string | null {
   if (typeof window === "undefined") return null;
   try {
+    const key = getDefaultModelKey(mode);
+    const direct = window.localStorage.getItem(key);
+    if (direct) return direct;
+    if (mode === "code") return null;
     const ref = window.localStorage.getItem(`${DEFAULT_MODEL_KEY}:ref`);
     if (ref) return ref;
     const legacy = window.localStorage.getItem(DEFAULT_MODEL_KEY);
@@ -72,10 +85,14 @@ export function loadDefaultModelRef(): string | null {
   }
 }
 
-export function saveDefaultModelRef(ref: string) {
+export function saveDefaultModelRef(ref: string, mode?: "chat" | "code") {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(`${DEFAULT_MODEL_KEY}:ref`, ref);
+    const key = getDefaultModelKey(mode);
+    window.localStorage.setItem(key, ref);
+    if (!mode || mode === "chat") {
+      window.localStorage.setItem(`${DEFAULT_MODEL_KEY}:ref`, ref);
+    }
   } catch {
     // Not critical: new chats fall back to a free model.
   }

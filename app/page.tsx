@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { UIMessage } from "ai";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { LogIn, LogOut, PanelLeft, Plug, Settings, Sparkles, SquarePen, SunMoon } from "lucide-react";
+import { LogIn, LogOut, PanelLeft, Plug, Settings, Sparkles, SquareCode, SquarePen, SunMoon } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { TabBar } from "@/components/TabBar";
 import { ChatPanel } from "@/components/ChatPanel";
@@ -183,55 +183,73 @@ export default function Home() {
     streamingRef.current = streamingIds;
   }, [streamingIds]);
 
-  const open = useCallback((id: string) => {
-    setActiveId(id);
-    saveActiveId(id);
-    setSidebarOpen(false);
-    setMountedIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
-    setUnreadIds((prev) => {
-      if (!prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-    setTabIds((prev) => {
-      if (prev.includes(id)) return prev;
-      const next = [...prev, id];
-      if (next.length <= MAX_TABS) return next;
-      // Close the oldest tab that is neither the one opening nor mid-reply.
-      const drop = next.find((t) => t !== id && !streamingRef.current.has(t));
-      return drop ? next.filter((t) => t !== drop) : next;
-    });
-  }, []);
+  const open = useCallback(
+    (id: string, newConversation?: Conversation) => {
+      if (newConversation) {
+        updateConversations((prev) => (prev.some((c) => c.id === id) ? prev : [...prev, newConversation]));
+      } else if (!conversationsRef.current?.some((c) => c.id === id)) {
+        const stored = loadConversations();
+        if (stored.some((c) => c.id === id)) {
+          setConversations(stored);
+        }
+      }
+      setActiveId(id);
+      saveActiveId(id);
+      setSidebarOpen(false);
+      setMountedIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+      setUnreadIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setTabIds((prev) => {
+        if (prev.includes(id)) return prev;
+        const next = [...prev, id];
+        if (next.length <= MAX_TABS) return next;
+        // Close the oldest tab that is neither the one opening nor mid-reply.
+        const drop = next.find((t) => t !== id && !streamingRef.current.has(t));
+        return drop ? next.filter((t) => t !== drop) : next;
+      });
+    },
+    [updateConversations]
+  );
 
   const creatingRef = useRef(false);
-  const handleNewChat = useCallback(async () => {
-    const list = conversationsRef.current;
-    if (!list || creatingRef.current) return;
-    // Reuse an untouched chat instead of piling up empty ones.
-    const empty = list.find((c) => c.messages.length === 0);
-    if (empty) return open(empty.id);
+  const handleNewChat = useCallback(
+    async (mode: "chat" | "code" = "chat") => {
+      const list = conversationsRef.current;
+      if (!list || creatingRef.current) return;
+      // Reuse an untouched chat of the requested mode instead of piling up empty ones.
+      const empty = list.find((c) => c.messages.length === 0 && (c.mode ?? "chat") === mode);
+      if (empty) return open(empty.id);
 
-    creatingRef.current = true;
-    try {
-      const model = await resolveNewChatModel();
-      let created: Conversation | null;
-      if (useRemoteRef.current) {
-        created = await createConversationRemote(model);
-        if (!created) {
-          toast({ tone: "error", title: "Could not start a chat", description: "The database did not answer. Try again." });
-          return;
+      creatingRef.current = true;
+      try {
+        const model = await resolveNewChatModel(mode);
+        let created: Conversation | null;
+        if (useRemoteRef.current) {
+          created = await createConversationRemote(model, { mode });
+          if (!created) {
+            toast({
+              tone: "error",
+              title: mode === "code" ? "Could not start a coding session" : "Could not start a chat",
+              description: "The database did not answer. Try again.",
+            });
+            return;
+          }
+        } else {
+          created = createConversation(model, { mode });
         }
-      } else {
-        created = createConversation(model);
+        const fresh = created;
+        updateConversations((prev) => [...prev, fresh]);
+        open(fresh.id);
+      } finally {
+        creatingRef.current = false;
       }
-      const fresh = created;
-      updateConversations((prev) => [...prev, fresh]);
-      open(fresh.id);
-    } finally {
-      creatingRef.current = false;
-    }
-  }, [open, toast, updateConversations]);
+    },
+    [open, toast, updateConversations]
+  );
 
   /** Moves focus off a closing or deleted tab to its neighbor, or to a fresh chat. */
   const leaveTab = useCallback(
@@ -363,7 +381,8 @@ export default function Home() {
 
   const actions = useMemo<PaletteAction[]>(
     () => [
-      { id: "new", label: "New chat", icon: SquarePen, run: () => void handleNewChat() },
+      { id: "new", label: "New chat", icon: SquarePen, run: () => void handleNewChat("chat") },
+      { id: "new-code", label: "New coding session", icon: SquareCode, run: () => void handleNewChat("code") },
       { id: "sidebar", label: "Toggle sidebar", icon: PanelLeft, hint: `${modKey} B`, run: toggleCollapsed },
       {
         id: "theme",
@@ -413,7 +432,8 @@ export default function Home() {
         activeIsEmpty={active.messages.length === 0}
         streamingIds={streamingIds}
         onSelect={open}
-        onNewChat={() => void handleNewChat()}
+        onNewChat={(mode) => void handleNewChat(mode ?? "chat")}
+        onNewCodeChat={() => void handleNewChat("code")}
         onRename={renameConversation}
         onDelete={deleteConversation}
         onOpenPalette={() => {
@@ -451,6 +471,7 @@ export default function Home() {
             >
               <ChatPanel
                 conversationId={c.id}
+                mode={c.mode}
                 active={c.id === active.id}
                 initialMessages={c.messages}
                 model={c.model || FALLBACK_MODEL}

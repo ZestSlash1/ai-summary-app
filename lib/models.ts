@@ -29,8 +29,8 @@ export function fetchModelCatalog(source: ModelSource, force = false): Promise<M
 
 /** The model ref a new chat starts with: the user's saved default, else a free model from the
  * source they last used app-wide (AI Gateway for everyone else). */
-export async function resolveNewChatModel(): Promise<string> {
-  const saved = loadDefaultModelRef();
+export async function resolveNewChatModel(mode?: "chat" | "code"): Promise<string> {
+  const saved = loadDefaultModelRef(mode);
   if (saved) return saved;
   const source = loadModelSource();
   return toModelRef(source, await fetchDefaultModelForSource(source));

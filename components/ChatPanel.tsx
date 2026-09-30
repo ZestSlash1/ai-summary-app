@@ -3,11 +3,12 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { ArrowDown, Brain, ChevronRight, ImagePlus, ListChecks, RotateCw } from "lucide-react";
+import { ArrowDown, Brain, ChevronRight, ImagePlus, Layers, ListChecks, RotateCw } from "lucide-react";
 import { gsap, useGSAP, Flip, reducedMotion } from "@/lib/motion";
 import { ModelSwitcher } from "./ModelSwitcher";
 import { RepoConnect } from "./RepoConnect";
 import { McpConnectors } from "./McpConnectors";
+import { WorkspaceRail } from "./workspace/WorkspaceRail";
 import { SkillPrompt } from "./SkillPrompt";
 import { MessageActions } from "./MessageActions";
 import { ThinkingIndicator } from "./ThinkingIndicator";
@@ -199,6 +200,7 @@ function Reasoning({ text, live }: { text: string; live: boolean }) {
 
 export function ChatPanel({
   conversationId,
+  mode,
   active,
   initialMessages,
   model,
@@ -215,6 +217,7 @@ export function ChatPanel({
   continuedIn,
 }: {
   conversationId: string;
+  mode?: "chat" | "code";
   active: boolean;
   initialMessages: UIMessage[];
   model: string;
@@ -345,6 +348,21 @@ export function ChatPanel({
   const [input, setInput] = useState("");
   const [mcpOpen, setMcpOpen] = useState(false);
   const [repoPromptOpen, setRepoPromptOpen] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(mode === "code");
+
+  const pendingChangesCount = useMemo(() => {
+    if (mode !== "code") return 0;
+    return extractPushableFiles(messages.map(textOf)).length;
+  }, [mode, messages]);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (mode === "code" && !githubRepo && signedIn && active && isEmpty) {
+      setRepoPromptOpen(true);
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [mode, githubRepo, signedIn, active, isEmpty]);
+
   // When the current turn began, and whether it went to Bonsai (slow first reply after a nap).
   const [turn, setTurn] = useState({ startedAt: 0, bonsai: false });
 
@@ -519,12 +537,8 @@ export function ChatPanel({
       setAttachment(null);
       setAttachError(null);
 
-      // Switch to new tab
-      if (typeof window !== "undefined" && typeof window.location?.reload === "function") {
-        window.location.reload();
-      } else {
-        onSelectConversation(newId);
-      }
+      // Switch to new tab smoothly without page reload
+      onSelectConversation(newId);
     } catch {
       sendingRef.current = false;
       setIsSwitching(false);
@@ -680,19 +694,33 @@ export function ChatPanel({
     ? "Describe the change you want"
     : onHermes
       ? "Give Hermes a task to run on your PC"
-      : githubRepo
-      ? `Ask about ${githubRepo.name}, or have ARO write code`
-      : "Ask ARO to write, explain, or fix code";
+      : mode === "code"
+        ? githubRepo
+          ? `Ask about ${githubRepo.name}, or have ARO write code`
+          : "Connect a repo or ask ARO to write code"
+        : githubRepo
+          ? `Ask about ${githubRepo.name}, or have ARO write code`
+          : "Ask ARO to write, explain, or fix code";
 
   const controls = (
     <>
+      {mode === "code" && (
+        <RepoConnect
+          value={githubRepo}
+          onChange={(repo) => onRepoChange(conversationId, repo)}
+          forceOpen={repoPromptOpen}
+          onForceOpenHandled={() => setRepoPromptOpen(false)}
+        />
+      )}
       <ModelSwitcher value={model} onChange={(m) => onModelChange(conversationId, m)} />
-      <RepoConnect
-        value={githubRepo}
-        onChange={(repo) => onRepoChange(conversationId, repo)}
-        forceOpen={repoPromptOpen}
-        onForceOpenHandled={() => setRepoPromptOpen(false)}
-      />
+      {mode !== "code" && (
+        <RepoConnect
+          value={githubRepo}
+          onChange={(repo) => onRepoChange(conversationId, repo)}
+          forceOpen={repoPromptOpen}
+          onForceOpenHandled={() => setRepoPromptOpen(false)}
+        />
+      )}
       <McpConnectors
         open={mcpOpen}
         onOpenChange={setMcpOpen}
@@ -709,6 +737,23 @@ export function ChatPanel({
         <ListChecks aria-hidden className="h-3.5 w-3.5" />
         Plan
       </button>
+      {mode === "code" && (
+        <button
+          type="button"
+          aria-pressed={workspaceOpen}
+          onClick={() => setWorkspaceOpen((v) => !v)}
+          title="Toggle workspace rail"
+          className={`${CHIP} ${workspaceOpen ? "border-nimbus-accent/40 bg-nimbus-accent-soft text-nimbus-accent-text hover:bg-nimbus-accent-soft hover:text-nimbus-accent-text" : ""}`}
+        >
+          <Layers aria-hidden className="h-3.5 w-3.5" />
+          Workspace
+          {pendingChangesCount > 0 && (
+            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-nimbus-accent px-1 text-[10px] font-semibold text-white">
+              {pendingChangesCount}
+            </span>
+          )}
+        </button>
+      )}
     </>
   );
 
@@ -718,10 +763,11 @@ export function ChatPanel({
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
-      className="relative isolate flex h-full min-h-0 flex-col"
+      className="relative isolate flex h-full min-h-0 flex-row overflow-hidden"
     >
-      {/* Ambient particles behind the welcome screen; fades away once the chat starts. */}
-      <AroField active={isEmpty && active} scopeRef={containerRef} />
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* Ambient particles behind the welcome screen; fades away once the chat starts. */}
+        <AroField active={isEmpty && active} scopeRef={containerRef} />
 
       {isEmpty && (
         <div className="absolute inset-x-0 top-4 z-10 flex justify-center">
@@ -1031,7 +1077,7 @@ export function ChatPanel({
       {isEmpty && (
         <div className="flex flex-1 flex-col pb-6 pt-6">
           <WelcomeSuggestions
-            suggestions={suggestionsFor(githubRepo)}
+            suggestions={suggestionsFor(githubRepo, mode)}
             onPick={(prompt) => trySend(prompt)}
             canEditImages={Boolean(canEditImages)}
             onPickImage={() => fileInputRef.current?.click()}
@@ -1049,6 +1095,16 @@ export function ChatPanel({
             <p className="text-[12.5px] text-nimbus-text-muted">PNG, JPEG, or WebP</p>
           </div>
         </div>
+      )}
+      </div>
+
+      {mode === "code" && (
+        <WorkspaceRail
+          repo={githubRepo}
+          messages={messages}
+          open={workspaceOpen}
+          onClose={() => setWorkspaceOpen(false)}
+        />
       )}
     </div>
   );
