@@ -22,7 +22,7 @@ function clock(seconds: number) {
 }
 
 const buttonClass =
-  "inline-flex min-h-11 items-center gap-1.5 rounded-[var(--nimbus-radius-pill)] border border-nimbus-border bg-nimbus-surface px-3.5 text-xs font-medium text-nimbus-text-muted transition-[color,transform,border-color] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-accent/40 hover:text-nimbus-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nimbus-accent active:scale-95 sm:min-h-9";
+  "inline-flex h-9 items-center gap-1.5 rounded-lg border border-nimbus-border bg-nimbus-surface px-3 text-[12.5px] font-medium text-nimbus-text-muted transition-[color,background-color,transform] duration-200 hover:bg-nimbus-surface-2 hover:text-nimbus-text active:scale-95";
 
 /**
  * Shows an image edit job: a placeholder while it runs, the picture when it is done,
@@ -140,7 +140,7 @@ export function ImageJobCard({
     return (
       <div
         role="alert"
-        className="mt-2 flex w-full max-w-[22rem] flex-col gap-3 rounded-[var(--nimbus-radius-card)] border border-nimbus-border bg-nimbus-bg p-4"
+        className="mt-2 flex w-full max-w-[22rem] flex-col gap-3 rounded-[14px] border border-nimbus-danger/25 bg-nimbus-danger-soft p-4"
       >
         <div className="flex items-start gap-2.5">
           <ImageOff aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-nimbus-text-muted" />
@@ -163,7 +163,7 @@ export function ImageJobCard({
   return (
     <figure className="mt-2 flex w-full max-w-[22rem] flex-col gap-2 text-nimbus-text">
       <div
-        className={`relative w-full overflow-hidden rounded-[var(--nimbus-radius-card)] border border-nimbus-border bg-nimbus-bg ${
+        className={`relative w-full overflow-hidden rounded-[14px] border border-nimbus-border bg-nimbus-surface ${
           phase.kind === "done" && loaded ? "" : "aspect-square"
         } ${phase.kind === "pending" ? "nimbus-sheen" : ""}`}
       >
@@ -190,8 +190,8 @@ export function ImageJobCard({
       </div>
 
       {pending ? (
-        <figcaption role="status" aria-live="polite" className="flex flex-col gap-0.5 px-1 text-sm">
-          <span className="font-medium">
+        <figcaption role="status" aria-live="polite" className="flex flex-col gap-0.5 px-1 text-[13px]">
+          <span className="aro-shimmer font-medium">
             {phase.kind === "pending" && phase.queued ? "Waiting for the GPU" : "Editing your image"}
           </span>
           <span className="text-xs text-nimbus-text-muted">

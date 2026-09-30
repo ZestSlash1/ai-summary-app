@@ -1,21 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Monitor, Moon, Sun } from "lucide-react";
 import type { Theme } from "@/lib/theme";
-import { loadTheme, saveTheme } from "@/lib/theme";
-
-const OPTIONS: { value: Theme; label: string }[] = [
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "system", label: "System" },
-];
+import { THEME_EVENT, loadTheme, saveTheme } from "@/lib/theme";
+import { Segmented } from "@/components/ui/Segmented";
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("system");
+  const [theme, setTheme] = useState<Theme>("dark");
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTheme(loadTheme());
+    const onTheme = (e: Event) => setTheme((e as CustomEvent<Theme>).detail);
+    window.addEventListener(THEME_EVENT, onTheme);
+    return () => window.removeEventListener(THEME_EVENT, onTheme);
   }, []);
 
   function select(value: Theme) {
@@ -24,21 +23,15 @@ export function ThemeToggle() {
   }
 
   return (
-    <div className="inline-flex rounded-[var(--nimbus-radius-pill)] border border-nimbus-border bg-nimbus-bg p-1">
-      {OPTIONS.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => select(opt.value)}
-          className={`rounded-[var(--nimbus-radius-pill)] px-3.5 py-1.5 text-sm font-medium transition-colors ${
-            theme === opt.value
-              ? "bg-nimbus-surface text-nimbus-text shadow-[var(--nimbus-shadow)]"
-              : "text-nimbus-text-muted hover:text-nimbus-text"
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      label="Theme"
+      value={theme}
+      onChange={select}
+      options={[
+        { value: "dark", label: "Dark", icon: <Moon aria-hidden className="h-3.5 w-3.5" /> },
+        { value: "light", label: "Light", icon: <Sun aria-hidden className="h-3.5 w-3.5" /> },
+        { value: "system", label: "System", icon: <Monitor aria-hidden className="h-3.5 w-3.5" /> },
+      ]}
+    />
   );
 }

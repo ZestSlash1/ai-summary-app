@@ -1,17 +1,25 @@
-import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/Providers";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
+// Two weights only, 400 and 500: hierarchy comes from size, color, and space.
 const geist = Geist({
   variable: "--font-geist",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
   title: "ARO",
-  description: "A friendly coding assistant that pushes straight to GitHub.",
+  description: "A coding workspace that reads your repo and pushes straight to GitHub.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -24,14 +32,26 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+    { media: "(prefers-color-scheme: light)", color: "#f1f1f3" },
+  ],
+};
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geist.variable} h-full antialiased`}
+      data-theme="dark"
+      className={`${geist.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex bg-nimbus-bg text-nimbus-text">
+      <head>
+        {/* Sets the saved theme before first paint, so there is no flash of the wrong one. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body className="flex h-full min-h-full bg-nimbus-chrome text-nimbus-text">
         <div id="nimbus-root">
           <Providers>{children}</Providers>
         </div>

@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { signIn, useSession } from "next-auth/react";
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
+import { Lightbulb, Plug, Sparkles, X } from "lucide-react";
+import { gsap, useGSAP, reducedMotion } from "@/lib/motion";
 import { BUILTIN_SKILLS, matchSkills, type Skill } from "@/lib/skills";
 import type { GithubRepoLink } from "@/lib/types";
-
-gsap.registerPlugin(useGSAP);
+import { GithubMark } from "./BrandMark";
 
 const MCP_NUDGE_KEYWORDS = [
   "search the web",
@@ -17,6 +16,7 @@ const MCP_NUDGE_KEYWORDS = [
   "scrape",
 ];
 
+/** Contextual hints above the composer: a skill that fits, a missing connector, a proposed skill. */
 export function SkillPrompt({
   latestUserText,
   githubRepo,
@@ -33,20 +33,23 @@ export function SkillPrompt({
   const { data: session } = useSession();
   const [approved, setApproved] = useState<Skill[]>([]);
   const [proposed, setProposed] = useState<Skill[]>([]);
+  // Hints the user closed stay closed for the rest of this chat.
+  const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     if (!session?.user) return;
+    let cancelled = false;
     fetch("/api/skills")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (!data) return;
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+        if (!data || cancelled) return;
         setApproved(data.approved ?? []);
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setProposed(data.proposed ?? []);
       })
       .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+    };
   }, [session?.user, latestUserText]);
 
   async function reviewSkill(id: string, status: "approved" | "rejected") {
@@ -62,146 +65,129 @@ export function SkillPrompt({
     });
   }
 
-  const skills = matchSkills(latestUserText, [...BUILTIN_SKILLS, ...approved]);
+  const dismiss = (key: string) => setDismissed((prev) => new Set(prev).add(key));
+
+  const skills = matchSkills(latestUserText, [...BUILTIN_SKILLS, ...approved]).filter(
+    (s) => !dismissed.has(s.id)
+  );
   const lower = latestUserText.toLowerCase();
   const suggestsMcp =
-    !hasEnabledMcp && MCP_NUDGE_KEYWORDS.some((kw) => lower.includes(kw));
-
+    !hasEnabledMcp && !dismissed.has("mcp") && MCP_NUDGE_KEYWORDS.some((kw) => lower.includes(kw));
   const latestProposed = proposed[0];
 
   if (skills.length === 0 && !suggestsMcp && !latestProposed) return null;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1.5">
       {skills.map((skill) => {
         if (!session?.user) {
           return (
-            <PromptCard
+            <Hint
               key={skill.id}
-              text={`This looks like it needs the ${skill.name} skill — sign in with GitHub to enable it.`}
-              actionLabel="Sign in with GitHub"
+              icon={<GithubMark className="h-3.5 w-3.5" />}
+              text={`${skill.name} needs GitHub. Sign in to turn it on.`}
+              actionLabel="Sign in"
               onAction={() => signIn("github")}
+              onDismiss={() => dismiss(skill.id)}
             />
           );
         }
         if (skill.id === "github-push" && !githubRepo) {
           return (
-            <PromptCard
+            <Hint
               key={skill.id}
-              text={`${skill.name} is enabled — connect this conversation to a repo to use it.`}
-              actionLabel="Connect a repo"
+              icon={<GithubMark className="h-3.5 w-3.5" />}
+              text="Connect a repo to this chat so ARO can read it and push code."
+              actionLabel="Connect repo"
               onAction={onConnectRepo}
+              onDismiss={() => dismiss(skill.id)}
             />
           );
         }
-        return <TipCard key={skill.id} text={skill.usageTip} />;
+        return (
+          <Hint
+            key={skill.id}
+            icon={<Lightbulb aria-hidden className="h-3.5 w-3.5" />}
+            text={skill.usageTip}
+            onDismiss={() => dismiss(skill.id)}
+          />
+        );
       })}
 
       {suggestsMcp && (
-        <PromptCard
-          text="This might need an external tool — no MCP connector is enabled yet."
-          actionLabel="Add a connector"
+        <Hint
+          icon={<Plug aria-hidden className="h-3.5 w-3.5" />}
+          text="This might need an outside tool, and no MCP connector is on yet."
+          actionLabel="Add connector"
           onAction={onOpenMcp}
+          onDismiss={() => dismiss("mcp")}
         />
       )}
 
       {latestProposed && (
-        <ProposedSkillCard
-          skill={latestProposed}
-          onApprove={() => reviewSkill(latestProposed.id, "approved")}
-          onReject={() => reviewSkill(latestProposed.id, "rejected")}
+        <Hint
+          icon={<Sparkles aria-hidden className="h-3.5 w-3.5" />}
+          text={
+            <>
+              You ask for this often. Save it as a skill? <span className="text-nimbus-text">{latestProposed.name}</span>:{" "}
+              {latestProposed.description}
+            </>
+          }
+          actionLabel="Save skill"
+          onAction={() => reviewSkill(latestProposed.id, "approved")}
+          onDismiss={() => reviewSkill(latestProposed.id, "rejected")}
+          dismissLabel="Not useful"
         />
       )}
     </div>
   );
 }
 
-function useCardEntrance() {
-  const ref = useRef<HTMLDivElement>(null);
-  useGSAP(() => {
-    if (!ref.current) return;
-    gsap.fromTo(
-      ref.current,
-      { opacity: 0, y: 8, scale: 0.98 },
-      { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power3.out" }
-    );
-  }, []);
-  return ref;
-}
-
-function PromptCard({
+function Hint({
+  icon,
   text,
   actionLabel,
   onAction,
+  onDismiss,
+  dismissLabel = "Dismiss",
 }: {
-  text: string;
-  actionLabel: string;
-  onAction: () => void;
+  icon: ReactNode;
+  text: ReactNode;
+  actionLabel?: string;
+  onAction?: () => void;
+  onDismiss: () => void;
+  dismissLabel?: string;
 }) {
-  const ref = useCardEntrance();
+  const ref = useRef<HTMLDivElement>(null);
+  useGSAP(() => {
+    gsap.from(ref.current, { autoAlpha: 0, y: 8, duration: reducedMotion() ? 0 : 0.45, ease: "aro" });
+  });
+
   return (
     <div
       ref={ref}
-      className="flex items-center justify-between gap-3 rounded-2xl border border-nimbus-accent/30 bg-nimbus-accent-soft px-4 py-2.5 text-sm text-nimbus-text"
+      className="flex items-center gap-2.5 rounded-[12px] border border-nimbus-border bg-nimbus-surface/80 py-1.5 pl-3 pr-1.5 text-[12.5px] text-nimbus-text-muted"
     >
-      <span>{text}</span>
+      <span className="shrink-0 text-nimbus-text-muted">{icon}</span>
+      <p className="min-w-0 flex-1 leading-snug">{text}</p>
+      {actionLabel && onAction && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="h-7 shrink-0 rounded-md bg-nimbus-accent px-2.5 text-[12px] font-medium text-white transition-[background-color,transform] hover:bg-nimbus-accent-hover active:scale-95"
+        >
+          {actionLabel}
+        </button>
+      )}
       <button
         type="button"
-        onClick={onAction}
-        className="shrink-0 rounded-[var(--nimbus-radius-pill)] bg-nimbus-accent px-3 py-1.5 text-xs font-medium text-white shadow-[var(--nimbus-glow)] transition-[opacity,transform] duration-300 ease-[var(--nimbus-ease)] hover:opacity-90 active:scale-95"
+        onClick={onDismiss}
+        aria-label={dismissLabel}
+        title={dismissLabel}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-nimbus-text-faint transition-colors hover:bg-nimbus-surface-2 hover:text-nimbus-text"
       >
-        {actionLabel}
+        <X aria-hidden className="h-3.5 w-3.5" />
       </button>
-    </div>
-  );
-}
-
-function TipCard({ text }: { text: string }) {
-  const ref = useCardEntrance();
-  return (
-    <div
-      ref={ref}
-      className="rounded-2xl border border-nimbus-free/30 bg-nimbus-free-soft px-4 py-2.5 text-sm text-nimbus-text"
-    >
-      💡 {text}
-    </div>
-  );
-}
-
-function ProposedSkillCard({
-  skill,
-  onApprove,
-  onReject,
-}: {
-  skill: Skill;
-  onApprove: () => void;
-  onReject: () => void;
-}) {
-  const ref = useCardEntrance();
-  return (
-    <div
-      ref={ref}
-      className="flex flex-col gap-2 rounded-2xl border border-dashed border-nimbus-accent/30 bg-nimbus-surface px-4 py-3 text-sm text-nimbus-text"
-    >
-      <p>
-        🧠 I noticed a pattern — turn this into a skill? <strong>{skill.name}</strong>: {skill.description}
-      </p>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={onApprove}
-          className="rounded-[var(--nimbus-radius-pill)] bg-nimbus-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity duration-300 ease-[var(--nimbus-ease)] hover:opacity-90"
-        >
-          Approve
-        </button>
-        <button
-          type="button"
-          onClick={onReject}
-          className="rounded-[var(--nimbus-radius-pill)] border border-nimbus-border px-3 py-1.5 text-xs font-medium text-nimbus-text-muted transition-colors duration-300 ease-[var(--nimbus-ease)] hover:text-nimbus-text"
-        >
-          Not useful
-        </button>
-      </div>
     </div>
   );
 }

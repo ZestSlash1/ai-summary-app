@@ -4,114 +4,126 @@
 
 @custom-variant dark (&:is(.dark *));
 
-:root {
-  --nimbus-bg: #eef1fb;
-  --nimbus-surface: #ffffff;
-  --nimbus-border: #e6e4f4;
-  --nimbus-text: #1a1a2e;
-  --nimbus-text-muted: #6b6a80;
-  --nimbus-accent: #5b57f5;
-  /* Text and icons drawn on top of --nimbus-accent. White is 5.1:1 on this indigo. */
-  --nimbus-on-accent: #ffffff;
-  --nimbus-accent-soft: #ecebff;
-  --nimbus-free: #16a37a;
-  --nimbus-free-soft: #e4f7f0;
-
-  --nimbus-radius-card: 20px;
-  --nimbus-radius-pill: 999px;
-  --nimbus-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
-  --nimbus-shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.05), 0 16px 40px rgba(0, 0, 0, 0.09);
-  --nimbus-glow: 0 0 0 rgba(91, 87, 245, 0);
-  --nimbus-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  --nimbus-shell-bg: rgba(0, 0, 0, 0.03);
-  --nimbus-ease: cubic-bezier(0.32, 0.72, 0, 1);
-  --nimbus-glow-a: rgba(91, 87, 245, 0.06);
-  --nimbus-glow-b: rgba(91, 87, 245, 0.045);
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+/*
+  ARO workspace tokens. Every color is a light-dark() pair, so the theme is one
+  attribute: data-theme="dark" (default), "light", or "system" (follows the OS).
+  The names keep the historic nimbus- prefix so older components keep working.
+*/
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="system"] {
+  color-scheme: light dark;
 }
 
-/* OLED dark: kept as inert scaffolding for when dark mode comes back
-   (see stratify-redesign-task.md). Dark mode is paused — nothing sets
-   data-theme="dark" right now, and this no longer auto-applies from
-   prefers-color-scheme. */
-:root[data-theme="dark"] {
-  --nimbus-bg: #000000;
-  --nimbus-surface: #0a0a0a;
-  --nimbus-border: #1c1c1c;
-  --nimbus-text: #f2f2f0;
-  --nimbus-text-muted: #8c8c87;
-  --nimbus-accent: #4c8dff;
-  /* White on this bright blue is only 3.2:1, so text on it goes near-black (6:1). */
-  --nimbus-on-accent: #0a0a0a;
-  --nimbus-accent-soft: rgba(76, 141, 255, 0.14);
-  --nimbus-free: #22d9a0;
-  --nimbus-free-soft: rgba(34, 217, 160, 0.14);
-  --nimbus-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 8px 20px rgba(0, 0, 0, 0.6);
-  --nimbus-shadow-lift: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 16px 40px rgba(0, 0, 0, 0.75);
-  --nimbus-glow: 0 0 24px rgba(76, 141, 255, 0.25);
-  --nimbus-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  --nimbus-shell-bg: rgba(255, 255, 255, 0.03);
-  --nimbus-glow-a: rgba(76, 141, 255, 0.1);
-  --nimbus-glow-b: rgba(34, 217, 160, 0.07);
-  --gemini-blend: screen;
+:root {
+  /* Surfaces, back to front: chrome (sidebar, tabs) > panel (main card) > surface > surface-2 */
+  --nimbus-chrome: light-dark(#f1f1f3, #09090b);
+  --nimbus-bg: var(--nimbus-chrome);
+  --nimbus-panel: light-dark(#ffffff, #111113);
+  --nimbus-surface: light-dark(#f7f7f8, #18181b);
+  --nimbus-surface-2: light-dark(#efeff1, #212125);
+  --nimbus-surface-3: light-dark(#e7e7ea, #2a2a2f);
+  --nimbus-border: light-dark(rgba(12, 12, 24, 0.08), rgba(255, 255, 255, 0.07));
+  --nimbus-border-strong: light-dark(rgba(12, 12, 24, 0.15), rgba(255, 255, 255, 0.13));
+
+  /* Text: muted passes 4.5:1 on every surface; faint is for placeholders and hints only. */
+  --nimbus-text: light-dark(#0c0c0e, #f4f4f5);
+  --nimbus-text-soft: light-dark(#2a2b30, #d5d6d9);
+  --nimbus-text-muted: light-dark(#5d5f65, #9c9ea2);
+  --nimbus-text-faint: light-dark(#85878d, #75777d);
+
+  /* One accent. White on it is 5:1. accent-text is the readable variant for text on panels. */
+  --nimbus-accent: #135feb;
+  --nimbus-accent-hover: #2b6ff0;
+  --nimbus-accent-press: #1044a0;
+  --nimbus-accent-text: light-dark(#135feb, #7ea9ff);
+  --nimbus-accent-soft: light-dark(rgba(19, 95, 235, 0.09), rgba(19, 95, 235, 0.18));
+  --nimbus-on-accent: #ffffff;
+
+  /* Real state only: online, warning, failure. */
+  --nimbus-free: light-dark(#0f7a57, #45d39b);
+  --nimbus-free-soft: light-dark(rgba(15, 122, 87, 0.1), rgba(69, 211, 155, 0.12));
+  --nimbus-warn: light-dark(#9a5800, #f2b45e);
+  --nimbus-danger: light-dark(#c42b2b, #ff7d7d);
+  --nimbus-danger-soft: light-dark(rgba(196, 43, 43, 0.08), rgba(255, 125, 125, 0.12));
+
+  --nimbus-radius-card: 14px;
+  --nimbus-radius-pill: 999px;
+  --nimbus-shadow-color: light-dark(rgba(16, 16, 28, 0.08), rgba(0, 0, 0, 0.5));
+  --nimbus-shadow-soft: light-dark(rgba(16, 16, 28, 0.05), rgba(0, 0, 0, 0.3));
+  --nimbus-shadow: 0 1px 2px var(--nimbus-shadow-soft), 0 8px 24px var(--nimbus-shadow-color);
+  --nimbus-shadow-lift: 0 0 0 1px var(--nimbus-border), 0 4px 12px var(--nimbus-shadow-soft),
+    0 20px 56px var(--nimbus-shadow-color);
+  --nimbus-glow: 0 8px 22px -8px rgba(19, 95, 235, 0.75);
+  --nimbus-inset-highlight: inset 0 1px 0 light-dark(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.045));
+  --nimbus-shell-bg: light-dark(rgba(12, 12, 24, 0.035), rgba(255, 255, 255, 0.035));
+  --nimbus-ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Syntax colors for sugar-high, tuned to sit quietly next to the blue accent. */
+  --sh-class: light-dark(#1d5fd1, #8cb4ff);
+  --sh-identifier: light-dark(#26272c, #e3e4e8);
+  --sh-sign: light-dark(#6b6e76, #8e9097);
+  --sh-property: light-dark(#0b6e99, #7fcbe8);
+  --sh-entity: light-dark(#7a3fb8, #c4a8ff);
+  --sh-jsxliterals: light-dark(#3b3d44, #cfd1d6);
+  --sh-string: light-dark(#18794e, #92d6a9);
+  --sh-keyword: light-dark(#a83e7c, #e59bc8);
+  --sh-comment: light-dark(#8a8c93, #6f727a);
+
+  /* shadcn tokens, pointed at the same palette so its primitives match. */
+  --background: var(--nimbus-panel);
+  --foreground: var(--nimbus-text);
+  --card: var(--nimbus-surface);
+  --card-foreground: var(--nimbus-text);
+  --popover: var(--nimbus-surface);
+  --popover-foreground: var(--nimbus-text);
+  --primary: var(--nimbus-accent);
+  --primary-foreground: var(--nimbus-on-accent);
+  --secondary: var(--nimbus-surface-2);
+  --secondary-foreground: var(--nimbus-text);
+  --muted: var(--nimbus-surface-2);
+  --muted-foreground: var(--nimbus-text-muted);
+  --accent: var(--nimbus-surface-2);
+  --accent-foreground: var(--nimbus-text);
+  --destructive: var(--nimbus-danger);
+  --border: var(--nimbus-border);
+  --input: var(--nimbus-border-strong);
+  --ring: var(--nimbus-accent);
+  --radius: 0.625rem;
 }
 
 @theme inline {
+  --color-nimbus-chrome: var(--nimbus-chrome);
   --color-nimbus-bg: var(--nimbus-bg);
+  --color-nimbus-panel: var(--nimbus-panel);
   --color-nimbus-surface: var(--nimbus-surface);
+  --color-nimbus-surface-2: var(--nimbus-surface-2);
+  --color-nimbus-surface-3: var(--nimbus-surface-3);
   --color-nimbus-border: var(--nimbus-border);
+  --color-nimbus-border-strong: var(--nimbus-border-strong);
   --color-nimbus-text: var(--nimbus-text);
+  --color-nimbus-text-soft: var(--nimbus-text-soft);
   --color-nimbus-text-muted: var(--nimbus-text-muted);
+  --color-nimbus-text-faint: var(--nimbus-text-faint);
   --color-nimbus-accent: var(--nimbus-accent);
+  --color-nimbus-accent-hover: var(--nimbus-accent-hover);
+  --color-nimbus-accent-press: var(--nimbus-accent-press);
+  --color-nimbus-accent-text: var(--nimbus-accent-text);
   --color-nimbus-accent-soft: var(--nimbus-accent-soft);
+  --color-nimbus-on-accent: var(--nimbus-on-accent);
   --color-nimbus-free: var(--nimbus-free);
   --color-nimbus-free-soft: var(--nimbus-free-soft);
+  --color-nimbus-warn: var(--nimbus-warn);
+  --color-nimbus-danger: var(--nimbus-danger);
+  --color-nimbus-danger-soft: var(--nimbus-danger-soft);
   --font-sans: var(--font-geist);
   --font-heading: var(--font-geist);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
+  --font-mono: var(--font-geist-mono);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -139,25 +151,21 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-body {
-  position: relative;
-  background: var(--nimbus-bg);
-  color: var(--nimbus-text);
+html {
   font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  -webkit-text-size-adjust: 100%;
 }
 
-/* Ambient glass depth: two soft, fixed, GPU-cheap glows. Never on a
-   scrolling container, never intercepting pointer events. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(560px 420px at 12% -6%, var(--nimbus-glow-a), transparent 70%),
-    radial-gradient(520px 400px at 96% 8%, var(--nimbus-glow-b), transparent 70%);
+body {
+  position: relative;
+  background: var(--nimbus-chrome);
+  color: var(--nimbus-text);
+  font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+}
+
+::selection {
+  background: color-mix(in srgb, var(--nimbus-accent) 32%, transparent);
 }
 
 #nimbus-root {
@@ -168,100 +176,130 @@ body::before {
   min-width: 0;
 }
 
-/* Custom scrollbar: thin, matches the surface palette instead of the OS
-   default. Firefox via scrollbar-color/-width, WebKit via pseudo-elements. */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--nimbus-border) transparent;
+/* One focus ring for everything interactive. Inputs inside the composer opt out
+   because the composer itself shows focus. */
+:where(a, button, [role="button"], [role="option"], input[type="checkbox"], input[type="radio"], select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--nimbus-accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.aro-bare-focus:focus-visible {
+  outline: none;
 }
 
+/* Thin scrollbars in the palette instead of the OS default. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--nimbus-border-strong) transparent;
+}
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
-
 *::-webkit-scrollbar-track {
   background: transparent;
 }
-
 *::-webkit-scrollbar-thumb {
-  background-color: var(--nimbus-border);
+  background-color: var(--nimbus-border-strong);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-
 *::-webkit-scrollbar-thumb:hover {
-  background-color: var(--nimbus-text-muted);
+  background-color: var(--nimbus-text-faint);
   background-clip: padding-box;
 }
-
 *::-webkit-scrollbar-corner {
   background: transparent;
 }
+.aro-no-scrollbar {
+  scrollbar-width: none;
+}
+.aro-no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
 
-/* Double-bezel shell: an outer machined tray around a card's inner core,
-   so surfaces read as physical objects instead of flat rectangles. */
+/* Kept for components that still use the double-bezel look (settings cards). */
 .nimbus-shell {
   background: var(--nimbus-shell-bg);
-  border-radius: calc(var(--nimbus-radius-card) + 6px);
-  padding: 6px;
+  border-radius: calc(var(--nimbus-radius-card) + 5px);
+  padding: 5px;
 }
-
 .nimbus-shell-inner {
-  border-radius: calc(var(--nimbus-radius-card));
+  border-radius: var(--nimbus-radius-card);
   box-shadow: var(--nimbus-inset-highlight);
 }
-
 .nimbus-glass {
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
 }
 
-@keyframes nimbus-pulse {
-  0%,
-  80%,
+/* Shimmering label for work in progress ("Thinking", a running tool). A moving
+   highlight on the text only, so it reads as alive without adding a spinner. */
+.aro-shimmer {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background: linear-gradient(
+    90deg,
+    var(--nimbus-text-muted) 0%,
+    var(--nimbus-text-muted) 35%,
+    var(--nimbus-text) 50%,
+    var(--nimbus-text-muted) 65%,
+    var(--nimbus-text-muted) 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: aro-shimmer 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes aro-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
   100% {
-    transform: scale(0.6);
-    opacity: 0.4;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
+    background-position: 0% 0;
   }
 }
 
-.nimbus-dot {
-  animation: nimbus-pulse 1.1s ease-in-out infinite;
+/* Streaming caret: solid while text arrives. */
+.aro-caret {
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  margin-left: 2px;
+  border-radius: 2px;
+  background: var(--nimbus-accent);
+  vertical-align: text-bottom;
+  animation: aro-caret 1s steps(1) infinite;
 }
-
-/* Thinking indicator: a small, understated ticking dot next to a plain
-   "Thinking for Ns…" line — no full-bleed background effect. */
-@keyframes nimbus-tick {
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scale(0.85);
-  }
+@keyframes aro-caret {
   50% {
-    opacity: 1;
-    transform: scale(1);
+    opacity: 0.25;
   }
 }
 
-.nimbus-tick-dot {
-  animation: nimbus-tick 1.4s ease-in-out infinite;
+/* Live status dot (streaming tab, online state): a soft ring breathing out. */
+.aro-live-dot {
+  position: relative;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .nimbus-dot,
-  .nimbus-tick-dot {
-    animation: none;
+.aro-live-dot::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.35;
+  animation: aro-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@keyframes aro-ping {
+  75%,
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
   }
 }
 
-/* Image edit card: a slow sheen over the placeholder while an edit runs, and a soft
-   fade when the finished image arrives. Both use transform and opacity only. */
+/* Image edit placeholder sheen and the finished image fade. */
 @keyframes nimbus-sheen {
   0% {
     transform: translateX(-100%);
@@ -270,7 +308,6 @@ body::before {
     transform: translateX(100%);
   }
 }
-
 @keyframes nimbus-fade-in {
   from {
     opacity: 0;
@@ -279,7 +316,6 @@ body::before {
     opacity: 1;
   }
 }
-
 .nimbus-sheen::after {
   content: "";
   position: absolute;
@@ -287,60 +323,176 @@ body::before {
   background: linear-gradient(90deg, transparent, var(--nimbus-shell-bg), transparent);
   animation: nimbus-sheen 1.8s ease-in-out infinite;
 }
-
 .nimbus-fade-in {
   animation: nimbus-fade-in 0.4s ease-out;
 }
 
+/* ---------- Assistant prose (markdown) ---------- */
+.aro-prose {
+  color: var(--nimbus-text-soft);
+  font-size: 14.5px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.aro-prose > :first-child {
+  margin-top: 0;
+}
+.aro-prose > :last-child {
+  margin-bottom: 0;
+}
+.aro-prose p {
+  margin: 0 0 0.85em;
+}
+.aro-prose h1,
+.aro-prose h2,
+.aro-prose h3,
+.aro-prose h4 {
+  color: var(--nimbus-text);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  margin: 1.4em 0 0.5em;
+}
+.aro-prose h1 {
+  font-size: 1.3em;
+}
+.aro-prose h2 {
+  font-size: 1.15em;
+}
+.aro-prose h3,
+.aro-prose h4 {
+  font-size: 1em;
+}
+.aro-prose strong {
+  color: var(--nimbus-text);
+  font-weight: 500;
+}
+.aro-prose a {
+  color: var(--nimbus-accent-text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--nimbus-accent-text) 35%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.2s ease;
+}
+.aro-prose a:hover {
+  text-decoration-color: currentColor;
+}
+.aro-prose ul,
+.aro-prose ol {
+  margin: 0 0 0.85em;
+  padding-left: 1.35em;
+}
+.aro-prose ul {
+  list-style: disc;
+}
+.aro-prose ol {
+  list-style: decimal;
+}
+.aro-prose li {
+  margin: 0.25em 0;
+  padding-left: 0.2em;
+}
+.aro-prose li::marker {
+  color: var(--nimbus-text-faint);
+}
+.aro-prose blockquote {
+  margin: 0 0 0.85em;
+  padding: 0.1em 0 0.1em 1em;
+  border-left: 2px solid var(--nimbus-border-strong);
+  color: var(--nimbus-text-muted);
+}
+.aro-prose hr {
+  margin: 1.4em 0;
+  border: 0;
+  border-top: 1px solid var(--nimbus-border);
+}
+.aro-prose :not(pre) > code {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.86em;
+  color: var(--nimbus-text);
+  background: var(--nimbus-surface-2);
+  border: 1px solid var(--nimbus-border);
+  padding: 0.12em 0.38em;
+  border-radius: 6px;
+}
+.aro-prose table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0 0 0.85em;
+  font-size: 0.93em;
+}
+.aro-prose th,
+.aro-prose td {
+  border: 1px solid var(--nimbus-border);
+  padding: 0.45em 0.75em;
+  text-align: left;
+}
+.aro-prose th {
+  color: var(--nimbus-text);
+  font-weight: 500;
+  background: var(--nimbus-surface);
+}
+
+/* While a reply streams, a caret trails the last block of text. */
+.aro-prose.is-streaming > :is(p, h1, h2, h3, h4, blockquote):last-child::after,
+.aro-prose.is-streaming > :is(ul, ol):last-child > li:last-child::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  margin-left: 3px;
+  border-radius: 2px;
+  background: var(--nimbus-accent);
+  vertical-align: text-bottom;
+  animation: aro-caret 1s steps(1) infinite;
+}
+
+/* ---------- Code blocks ---------- */
+.aro-code {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+/* Lines stay inline: sugar-high already separates them with newlines inside the <pre>. */
+.aro-code .sh__line {
+  display: inline;
+}
+.aro-code pre,
+.aro-code {
+  padding-right: 16px;
+}
+.aro-code .sh__line::before {
+  counter-increment: aro-line;
+  content: counter(aro-line);
+  display: inline-block;
+  width: 2.6em;
+  margin-right: 14px;
+  padding-right: 10px;
+  text-align: right;
+  color: var(--nimbus-text-faint);
+  opacity: 0.7;
+  user-select: none;
+}
+.aro-code code {
+  counter-reset: aro-line;
+}
+.aro-code .sh__token--comment {
+  font-style: italic;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .aro-shimmer,
+  .aro-caret,
+  .aro-live-dot::after,
   .nimbus-sheen::after,
   .nimbus-fade-in {
     animation: none;
   }
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  html {
-    @apply font-sans;
+  .aro-shimmer {
+    color: var(--nimbus-text-muted);
+    -webkit-text-fill-color: currentColor;
+    background: none;
   }
 }

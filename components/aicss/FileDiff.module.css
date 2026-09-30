@@ -1,4 +1,4 @@
-.diff { border-radius: 12px; background: var(--nimbus-bg); box-shadow: var(--nimbus-shadow); padding: 12px 16px 16px; overflow: hidden; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.diff { border-radius: 12px; background: var(--nimbus-surface); border: 1px solid var(--nimbus-border); padding: 12px 16px 16px; overflow: hidden; font-family: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace; }
 .diffHead {
   display: flex; align-items: center; gap: 8px;
   margin: -12px -16px 0; padding: 10px 12px 10px 16px;
@@ -9,7 +9,7 @@
 .diffFile { color: var(--nimbus-text); line-height: 1; }
 .diffStat { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-size: 12px; line-height: 1; }
 .diffStat .add { color: var(--nimbus-free); }
-.diffStat .del { color: #dc2626; }
+.diffStat .del { color: var(--nimbus-danger); }
 .diffBody {
   position: relative;
   margin: 0 -16px -16px; overflow-x: auto; overflow-y: hidden;
@@ -35,11 +35,11 @@
 }
 .diffRow.add::before { background: var(--nimbus-free); }
 .diffRow.del::before {
-  background: repeating-linear-gradient(45deg, #dc2626 0, #dc2626 1.5px, transparent 1.5px, transparent 3px);
+  background: repeating-linear-gradient(45deg, var(--nimbus-danger) 0, var(--nimbus-danger) 1.5px, transparent 1.5px, transparent 3px);
 }
 .diffRow.add { background: var(--nimbus-free-soft); }
 .diffRow.add .sign, .diffRow.add .new { color: var(--nimbus-free); }
 .diffRow.add code { color: var(--nimbus-text); }
-.diffRow.del { background: rgba(220, 38, 38, 0.08); }
-.diffRow.del .sign, .diffRow.del .old { color: #dc2626; }
+.diffRow.del { background: var(--nimbus-danger-soft); }
+.diffRow.del .sign, .diffRow.del .old { color: var(--nimbus-danger); }
 .diffRow.del code { color: var(--nimbus-text); }
