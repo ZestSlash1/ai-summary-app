@@ -31,6 +31,7 @@ export const Composer = forwardRef<
     onAttachFile: (file: File | undefined) => void;
     onRemoveAttachment: () => void;
     dragging: boolean;
+    contextUsage?: { tokens: number; limit: number; percent: number; level: "normal" | "warning" | "danger" } | null;
   }
 >(function Composer(
   {
@@ -50,6 +51,7 @@ export const Composer = forwardRef<
     onAttachFile,
     onRemoveAttachment,
     dragging,
+    contextUsage,
   },
   ref
 ) {
@@ -89,6 +91,28 @@ export const Composer = forwardRef<
       data-dragging={dragging || undefined}
       className="group/composer relative rounded-[16px] border border-nimbus-border-strong bg-nimbus-surface shadow-[var(--nimbus-inset-highlight),var(--nimbus-shadow)] transition-[border-color,box-shadow] duration-300 focus-within:border-nimbus-accent/50 focus-within:shadow-[0_0_0_4px_var(--nimbus-accent-soft),var(--nimbus-shadow)] data-[dragging]:border-nimbus-accent data-[dragging]:shadow-[0_0_0_4px_var(--nimbus-accent-soft)]"
     >
+      {contextUsage && contextUsage.percent > 5 && (
+        <div
+          role="progressbar"
+          aria-valuenow={Math.round(contextUsage.percent)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`Context used: ${Math.round(contextUsage.percent)}% (${contextUsage.tokens} of ${contextUsage.limit} tokens)`}
+          title={`Context: ${Math.round(contextUsage.percent)}% (${contextUsage.tokens.toLocaleString()} / ${contextUsage.limit.toLocaleString()} tokens)`}
+          className="relative h-[2px] w-full overflow-hidden rounded-t-[16px] bg-nimbus-border/30"
+        >
+          <div
+            style={{ width: `${contextUsage.percent}%` }}
+            className={`h-full transition-all duration-300 ${
+              contextUsage.level === "danger"
+                ? "bg-rose-500"
+                : contextUsage.level === "warning"
+                  ? "bg-amber-500"
+                  : "bg-nimbus-accent/60"
+            }`}
+          />
+        </div>
+      )}
       {(attachment || preparing) && (
         <div className="flex items-center gap-3 px-3 pt-3">
           {preparing ? (

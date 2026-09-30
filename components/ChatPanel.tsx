@@ -35,6 +35,7 @@ import { loadModelSource, type ModelSource } from "@/lib/storage";
 import { parseModelRef } from "@/lib/modelRef";
 import { useHomeGpu } from "@/lib/useHomeGpu";
 import { ImageError, prepareImage, type PreparedImage } from "@/lib/imageResize";
+import { estimateConversationTokens, getModelContextLimit, calculateContextUsage } from "@/lib/tokenEstimate";
 
 function textOf(message: UIMessage): string {
   return message.parts
@@ -321,7 +322,12 @@ export function ChatPanel({
   const [turn, setTurn] = useState({ startedAt: 0, bonsai: false });
 
   // Image editing: only offered to accounts allowed to use the home GPU.
-  const { allowed: canEditImages } = useHomeGpu();
+  const { allowed: canEditImages, status: gpu } = useHomeGpu();
+  const contextUsage = useMemo(() => {
+    const tokens = estimateConversationTokens(messages);
+    const limit = getModelContextLimit(model, gpu?.bonsaiContext);
+    return calculateContextUsage(tokens, limit);
+  }, [messages, model, gpu?.bonsaiContext]);
   const [attachment, setAttachment] = useState<PreparedImage | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
@@ -780,6 +786,7 @@ export function ChatPanel({
             onAttachFile={(file) => void attachFile(file)}
             onRemoveAttachment={() => setAttachment(null)}
             dragging={dragging}
+            contextUsage={contextUsage}
           />
 
           {!isEmpty && (
