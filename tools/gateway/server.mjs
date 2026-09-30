@@ -11,9 +11,17 @@
 
 import http from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import fs, { readFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const MAX_SKILL_TOTAL_BYTES = 200 * 1024;
+const SKILL_BINARY_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'svg', 'woff', 'woff2', 'ttf',
+  'eot', 'mp4', 'mov', 'webm', 'mp3', 'wav', 'zip', 'gz', 'tar', 'pdf',
+  'exe', 'dll', 'so', 'dylib', 'bin', 'iso', 'wasm', 'pyc', 'class', 'lock',
+]);
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -112,6 +120,34 @@ async function getJson(url, timeoutMs = 2000, headers = {}) {
   const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), headers });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
+}
+
+function readBodyJson(req, maxBytes) {
+  return new Promise((resolve, reject) => {
+    let received = 0;
+    const chunks = [];
+    req.on('data', (c) => {
+      received += c.length;
+      if (received > maxBytes) {
+        req.destroy();
+        const err = new Error('Request too large.');
+        err.status = 413;
+        return reject(err);
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      try {
+        const text = Buffer.concat(chunks).toString('utf8');
+        resolve(text ? JSON.parse(text) : {});
+      } catch {
+        const err = new Error('Invalid JSON body.');
+        err.status = 400;
+        reject(err);
+      }
+    });
+    req.on('error', reject);
+  });
 }
 
 export function createGateway(cfg) {
@@ -340,6 +376,88 @@ export function createGateway(cfg) {
         return json(res, 503, { error: { message: 'Hermes is not set up on this PC.', type: 'hermes_unconfigured' } });
       }
       return proxy(req, res, cfg.hermes, sub + search, hermesAuth());
+    }
+
+    // ---- Hermes Skill Installation: allowlist route to write into ~/.hermes/skills
+    if (pathname === '/hermes-skills/install' && req.method === 'POST') {
+      let body;
+      try {
+        body = await readBodyJson(req, cfg.maxBodyBytes);
+      } catch (err) {
+        return json(res, err.status || 400, { error: { message: err.message } });
+      }
+
+      const { name, files } = body || {};
+      if (!name || typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name)) {
+        return json(res, 400, {
+          error: { message: 'Invalid or missing skill name. Only alphanumeric, dashes, and underscores are allowed.' },
+        });
+      }
+
+      if (!files || typeof files !== 'object' || Array.isArray(files) || Object.keys(files).length === 0) {
+        return json(res, 400, { error: { message: 'Missing or empty files object.' } });
+      }
+
+      let totalBytes = 0;
+      const targetDir = path.join(os.homedir(), '.hermes', 'skills', name);
+      const normalizedTargetDir = path.resolve(targetDir);
+
+      for (const [relPath, content] of Object.entries(files)) {
+        if (!relPath || typeof relPath !== 'string') {
+          return json(res, 400, { error: { message: 'Invalid file path in files.' } });
+        }
+        const normalizedRel = relPath.replace(/\\/g, '/');
+        if (
+          normalizedRel.startsWith('/') ||
+          normalizedRel.includes('../') ||
+          normalizedRel.includes('/..') ||
+          normalizedRel === '..'
+        ) {
+          return json(res, 400, { error: { message: `Path traversal detected in file: ${relPath}` } });
+        }
+
+        const ext = normalizedRel.split('.').pop()?.toLowerCase() ?? '';
+        if (SKILL_BINARY_EXTENSIONS.has(ext)) {
+          return json(res, 400, { error: { message: `Binary extension not allowed: ${relPath}` } });
+        }
+
+        if (typeof content !== 'string') {
+          return json(res, 400, { error: { message: `File content must be text string: ${relPath}` } });
+        }
+
+        if (content.includes('\0')) {
+          return json(res, 400, { error: { message: `Binary NUL byte detected in: ${relPath}` } });
+        }
+
+        const byteSize = Buffer.byteLength(content, 'utf8');
+        totalBytes += byteSize;
+        if (totalBytes > MAX_SKILL_TOTAL_BYTES) {
+          return json(res, 413, {
+            error: { message: `Total skill size exceeds 200 KB limit (${totalBytes} bytes).` },
+          });
+        }
+      }
+
+      try {
+        fs.mkdirSync(normalizedTargetDir, { recursive: true });
+        for (const [relPath, content] of Object.entries(files)) {
+          const dest = path.resolve(normalizedTargetDir, relPath);
+          if (!dest.startsWith(normalizedTargetDir + path.sep) && dest !== normalizedTargetDir) {
+            return json(res, 400, { error: { message: `Invalid destination path for file: ${relPath}` } });
+          }
+          fs.mkdirSync(path.dirname(dest), { recursive: true });
+          fs.writeFileSync(dest, content, 'utf8');
+        }
+      } catch (err) {
+        return json(res, 500, { error: { message: `Failed to write skill files: ${err.message}` } });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        skill: name,
+        path: normalizedTargetDir,
+        filesCount: Object.keys(files).length,
+      });
     }
 
     // ---- ComfyUI
