@@ -53,6 +53,7 @@ export async function POST(request: Request) {
       title: body.title || (body.mode === "code" ? "New coding session" : "New chat"),
       model: body.model || FALLBACK_MODEL,
       messages: [],
+      ...(body.mode ? { mode: body.mode } : {}),
     })
     .select()
     .single();

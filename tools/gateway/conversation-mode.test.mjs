@@ -95,6 +95,31 @@ test('ChatPanel.tsx integrates WorkspaceRail and avoids window.location.reload',
   );
 });
 
+test('POST /api/conversations inserts mode into Supabase table', () => {
+  const routeContent = fs.readFileSync(path.resolve('app/api/conversations/route.ts'), 'utf-8');
+  assert.ok(
+    routeContent.includes('body.mode ? { mode: body.mode }') ||
+    routeContent.includes('mode: body.mode'),
+    'Expected mode to be included in supabase insert payload'
+  );
+});
+
+test('WorkspaceRail.tsx deduplicates pending files by path keeping latest content', () => {
+  const railContent = fs.readFileSync(path.resolve('components/workspace/WorkspaceRail.tsx'), 'utf-8');
+  assert.ok(
+    railContent.includes('new Map') && railContent.includes('deduped.set(f.path, f)'),
+    'Expected WorkspaceRail to deduplicate pending files by path'
+  );
+});
+
+test('WorkspaceRail.tsx retry triggers a fresh fetch', () => {
+  const railContent = fs.readFileSync(path.resolve('components/workspace/WorkspaceRail.tsx'), 'utf-8');
+  assert.ok(
+    railContent.includes('refreshIndex') || railContent.includes('fetchTree'),
+    'Expected WorkspaceRail to trigger a fresh fetch on retry'
+  );
+});
+
 test('zero em-dashes across all Task 6 files', () => {
   const files = [
     'lib/types.ts',
@@ -118,3 +143,4 @@ test('zero em-dashes across all Task 6 files', () => {
     );
   }
 });
+

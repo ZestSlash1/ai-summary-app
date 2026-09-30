@@ -58,6 +58,7 @@ export function WorkspaceRail({
   const [filter, setFilter] = useState("");
   const [entries, setEntries] = useState<TreeEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshIndex, setRefreshIndex] = useState(0);
 
   // Fetch repository tree when repo is linked and files tab is viewed
   useEffect(() => {
@@ -90,14 +91,17 @@ export function WorkspaceRail({
     return () => {
       active = false;
     };
-  }, [repo]);
+  }, [repo, refreshIndex]);
 
   const activeEntries = repo ? entries : null;
   const activeError = repo ? error : null;
   const loading = Boolean(repo && activeEntries === null && !activeError);
 
   const pendingFiles: PushableFile[] = useMemo(() => {
-    return extractPushableFiles(messages.map(textOf));
+    const raw = extractPushableFiles(messages.map(textOf));
+    const deduped = new Map<string, PushableFile>();
+    for (const f of raw) deduped.set(f.path, f);
+    return Array.from(deduped.values());
   }, [messages]);
 
   const filteredEntries = useMemo(() => {
@@ -248,6 +252,7 @@ export function WorkspaceRail({
                         onClick={() => {
                           setEntries(null);
                           setError(null);
+                          setRefreshIndex((i) => i + 1);
                         }}
                         className="mt-2 flex items-center gap-1 text-[11.5px] font-medium underline"
                       >
@@ -257,13 +262,13 @@ export function WorkspaceRail({
                     </div>
                   )}
 
-                  {!loading && !error && filteredEntries.length === 0 && (
+                  {!loading && !activeError && filteredEntries.length === 0 && (
                     <p className="py-6 text-center text-[12.5px] text-nimbus-text-muted">
                       {filter ? "No files match your filter." : "Repository is empty."}
                     </p>
                   )}
 
-                  {!loading && !error && filteredEntries.length > 0 && (
+                  {!loading && !activeError && filteredEntries.length > 0 && (
                     <ul className="flex flex-col gap-0.5">
                       {filteredEntries.map((entry) => (
                         <li key={entry.path}>
