@@ -6,10 +6,10 @@ import {
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { auth } from '@/auth';
 import { canUseBonsai, bonsaiDenied } from '@/lib/access';
-import { hermesEndpoint } from '@/lib/hermes';
 import { parseModelRef } from '@/lib/modelRef';
 import { FALLBACK_MODEL } from '@/lib/types';
 import type { ModelSource } from '@/lib/storage';
+import { handoffPrompt, splitSystemMessages } from '@/lib/handoff';
 
 export const maxDuration = 300;
 
@@ -18,7 +18,6 @@ export const SUMMARY_PROMPT =
 
 let omniroute: ReturnType<typeof createOpenAICompatible> | null = null;
 let bonsai: ReturnType<typeof createOpenAICompatible> | null = null;
-let hermes: ReturnType<typeof createOpenAICompatible> | null = null;
 
 function resolveModel(model: string, source: ModelSource | undefined) {
   if (source === 'bonsai') {
@@ -48,20 +47,6 @@ function resolveModel(model: string, source: ModelSource | undefined) {
       });
     }
     return omniroute(model);
-  }
-  if (source === 'hermes') {
-    const endpoint = hermesEndpoint();
-    if (!endpoint) {
-      throw new Error('Hermes is not configured.');
-    }
-    if (!hermes) {
-      hermes = createOpenAICompatible({
-        name: 'hermes',
-        baseURL: `${endpoint.base}/v1`,
-        apiKey: endpoint.token,
-      });
-    }
-    return hermes(model || 'hermes-agent');
   }
   return model;
 }
@@ -106,19 +91,27 @@ export async function POST(request: Request) {
     if (modelRef.source === 'bonsai' && !canUseBonsai(session)) {
       return bonsaiDenied(session);
     }
-    if (modelRef.source === 'hermes' && (!canUseBonsai(session) || !session?.githubUserId)) {
-      return bonsaiDenied(session, 'Hermes');
+    if (modelRef.source === 'hermes') {
+      // Hermes is an agent with tools: sending it a transcript would run a full agent turn
+      // and write into its memory. It compresses its own context, so there is nothing to do.
+      return Response.json(
+        { error: 'Hermes manages its own context, so it does not need a summary.' },
+        { status: 400 }
+      );
     }
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return Response.json({ summary: '' });
     }
 
-    const modelMessages = await convertToModelMessages(compactHistory(messages));
+    // An earlier hand-off summary is context for this one, not a message the SDK will accept.
+    const { system: earlier, rest } = splitSystemMessages(messages);
+    if (rest.length === 0) return Response.json({ summary: earlier });
+    const modelMessages = await convertToModelMessages(compactHistory(rest));
 
     const result = await generateText({
       model: resolveModel(modelRef.id, modelRef.source),
-      system: SUMMARY_PROMPT,
+      system: SUMMARY_PROMPT + handoffPrompt(earlier, 6000),
       messages: [
         ...modelMessages,
         {
@@ -129,8 +122,8 @@ export async function POST(request: Request) {
     });
 
     return Response.json({ summary: result.text });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to generate summary.';
-    return Response.json({ error: message }, { status: 500 });
+  } catch {
+    // Upstream errors can name internal hosts; the client only needs to know it failed.
+    return Response.json({ error: 'Could not summarize this chat.' }, { status: 500 });
   }
 }

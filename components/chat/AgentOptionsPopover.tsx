@@ -160,17 +160,17 @@ export function AgentOptionsPopover({
                 {
                   id: "ask" as AgentPermission,
                   label: "Ask before writes",
-                  desc: "Prompt for approval before writing or pushing code",
+                  desc: "Push is a button you press, and Hermes asks before risky commands",
                 },
                 {
                   id: "auto" as AgentPermission,
                   label: "Auto-accept edits",
-                  desc: "Directly apply changes without manual approval",
+                  desc: "Hermes applies file edits without asking. Risky commands and pushes still need your OK",
                 },
                 {
                   id: "readonly" as AgentPermission,
                   label: "Read-only",
-                  desc: "Strictly inspect and review, drop write tools",
+                  desc: "No pushes or image edits. Hermes is told not to change anything and risky commands are denied",
                 },
               ].map((perm) => (
                 <button

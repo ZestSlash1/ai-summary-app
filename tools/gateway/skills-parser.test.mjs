@@ -143,10 +143,15 @@ test('gateway POST /hermes-skills/install rejects unauthorized requests', async 
 
 test('gateway POST /hermes-skills/install validates name and security guards', async () => {
   const { createGateway } = await import('./server.mjs');
+  const fsMod = await import('node:fs');
+  const osMod = await import('node:os');
+  const pathMod = await import('node:path');
+  const skillsDir = fsMod.mkdtempSync(pathMod.join(osMod.tmpdir(), 'aro-skills-test-'));
   const token = 'test-token-0123456789-abcdefghijkl';
   const server = createGateway({
     token,
     gpuMode: 'off',
+    hermesSkillsDir: skillsDir,
   });
   const port = await new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server.address().port)));
 
@@ -202,15 +207,7 @@ test('gateway POST /hermes-skills/install validates name and security guards', a
     assert.equal(body.skill, 'test-gateway-install-skill');
   } finally {
     server.close();
-    try {
-      const os = await import('node:os');
-      const fs = await import('node:fs');
-      const path = await import('node:path');
-      const testDir = path.join(os.homedir(), '.hermes', 'skills', 'test-gateway-install-skill');
-      if (fs.existsSync(testDir)) {
-        fs.rmSync(testDir, { recursive: true, force: true });
-      }
-    } catch {}
+    fsMod.rmSync(skillsDir, { recursive: true, force: true });
   }
 });
 

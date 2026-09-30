@@ -63,12 +63,11 @@ export function HermesApprovalCard({
 
   /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
   useEffect(() => {
-    if (live && state.kind === "waiting") {
-      if (permission === "auto") {
-        void answer("once");
-      } else if (permission === "readonly") {
-        void answer("deny");
-      }
+    // Read-only denies on the user's behalf. There is no mode that approves: Hermes only asks
+    // about commands it has flagged as risky (deleting, installing, system changes), and those
+    // always need a person. File edits never reach this card; Hermes applies them itself.
+    if (live && state.kind === "waiting" && permission === "readonly") {
+      void answer("deny");
     }
   }, [live, state.kind, permission, approval.runId, approval.requestId]);
   /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */

@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { gh } from "@/lib/github";
+import { gh, isSafeRepoSegment } from "@/lib/github";
 import { parseSkillFrontMatter, validateSkillFiles } from "@/lib/skillParser";
 import {
   isCuratedSource,
@@ -50,12 +50,26 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!isSafeRepoSegment(owner) || !isSafeRepoSegment(repoName)) {
+    return Response.json({ error: "Invalid owner or repo name." }, { status: 400 });
+  }
+
   const normalizedSkillPath = skillPath.replace(/^\/+|\/+$/g, "");
 
   try {
     const treeData = await gh<{
       tree: { path: string; type: string; sha: string; size?: number }[];
+      truncated?: boolean;
     }>(token, `/repos/${owner}/${repoName}/git/trees/${encodeURIComponent(branch)}?recursive=1`);
+
+    // A huge repo comes back cut off, and a skill in the missing part would look like it does
+    // not exist. Say so instead of reporting "No SKILL.md found".
+    if (treeData.truncated) {
+      return Response.json(
+        { error: "This repository is too large to scan for skills. Point at a folder with a full GitHub URL." },
+        { status: 422 }
+      );
+    }
 
     const entries = treeData.tree || [];
 
@@ -72,13 +86,12 @@ export async function POST(request: Request) {
       );
     });
 
+    // SKILL.md must sit at the top of the skill folder (or be the file itself). Accepting one
+    // anywhere below let a folder with no real skill install as an empty one.
+    const rootSkillMd = normalizedSkillPath ? `${normalizedSkillPath.toLowerCase()}/skill.md` : "skill.md";
     const hasSkillMd = skillEntries.some((e) => {
       const lower = e.path.toLowerCase();
-      return (
-        lower === "skill.md" ||
-        lower.endsWith("/skill.md") ||
-        lower === `${normalizedSkillPath.toLowerCase()}/skill.md`
-      );
+      return lower === rootSkillMd || (lower === normalizedSkillPath.toLowerCase() && lower.endsWith("skill.md"));
     });
 
     if (!hasSkillMd) {
@@ -175,18 +188,23 @@ export async function POST(request: Request) {
     let storedInDb = false;
     if (isSupabaseConfigured() && session?.githubUserId) {
       try {
-        const { error } = await supabase.from("installed_skills").upsert({
-          user_id: session.githubUserId,
-          skill_id: installedSkill.id,
-          name: installedSkill.name,
-          description: installedSkill.description,
-          repo: installedSkill.repo,
-          path: installedSkill.path,
-          branch: installedSkill.branch,
-          files: installedSkill.files,
-          enabled: true,
-          updated_at: new Date().toISOString(),
-        });
+        // onConflict matches the unique (user_id, skill_id) in schema.sql, so reinstalling
+        // updates the row. Without it every reinstall added a duplicate.
+        const { error } = await supabase.from("installed_skills").upsert(
+          {
+            user_id: session.githubUserId,
+            skill_id: installedSkill.id,
+            name: installedSkill.name,
+            description: installedSkill.description,
+            repo: installedSkill.repo,
+            path: installedSkill.path,
+            branch: installedSkill.branch,
+            files: installedSkill.files,
+            enabled: true,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id,skill_id" }
+        );
         if (!error) storedInDb = true;
       } catch {
         // Fall back to client storage

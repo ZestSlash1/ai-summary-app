@@ -312,7 +312,12 @@ export function ChatPanel({
             if (typeof window === "undefined") return [];
             try {
               const raw = localStorage.getItem("aro-installed-skills");
-              return raw ? JSON.parse(raw) : [];
+              const list = raw ? (JSON.parse(raw) as Record<string, unknown>[]) : [];
+              // Only what the model can use. The installed skills also hold every bundled file
+              // (up to 200 KB each), which would swell every request for nothing.
+              return list
+                .filter((s) => s.enabled !== false)
+                .map((s) => ({ name: s.name, description: s.description, skillMd: s.skillMd, enabled: true }));
             } catch {
               return [];
             }
@@ -462,9 +467,11 @@ export function ChatPanel({
     try {
       const parsed = JSON.parse(pendingRaw);
       if (parsed?.text) {
-        requestAnimationFrame(() => {
+        // A timer, not requestAnimationFrame: frames stop in a background tab, so a user who
+        // switched tabs while the summary loaded came back to a message that never went out.
+        window.setTimeout(() => {
           trySendRef.current(parsed.text, parsed.image);
-        });
+        }, 0);
       }
     } catch {
       // Ignore
@@ -603,11 +610,9 @@ export function ChatPanel({
     if (messageIndex < 0 || messageIndex >= messages.length) return;
     const truncated = messages.slice(0, messageIndex + 1);
     setMessages(truncated);
-    if (typeof window !== "undefined") {
-      const all = loadConversations();
-      const updated = all.map((c) => (c.id === conversationId ? { ...c, messages: truncated } : c));
-      saveConversations(updated);
-    }
+    // The normal save path: it updates the app's state and, when signed in, the database.
+    // Writing localStorage directly left signed-in chats (and the page's own copy) unchanged.
+    persistRef.current(conversationId, truncated);
     toast({ title: "Restored conversation to this checkpoint.", tone: "success" });
   };
 
@@ -623,11 +628,7 @@ export function ChatPanel({
       }
       case "clear": {
         setMessages([]);
-        if (typeof window !== "undefined") {
-          const all = loadConversations();
-          const updated = all.map((c) => (c.id === conversationId ? { ...c, messages: [] } : c));
-          saveConversations(updated);
-        }
+        persistRef.current(conversationId, []);
         toast({ title: "Conversation cleared", tone: "info" });
         break;
       }

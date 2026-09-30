@@ -26,12 +26,17 @@ test('app/api/chat/summary/route.ts implements summary endpoint without em-dashe
   assert.doesNotMatch(content, /—/, 'Expected no em-dashes in route.ts');
 });
 
-test('app/api/chat/summary/route.ts checks access for bonsai and hermes models', () => {
+test('app/api/chat/summary/route.ts checks Bonsai access and never sends a transcript to Hermes', () => {
   const filePath = path.resolve('app/api/chat/summary/route.ts');
   const content = fs.readFileSync(filePath, 'utf-8');
   assert.ok(content.includes('canUseBonsai(session)'), 'Expected canUseBonsai check');
   assert.ok(content.includes('bonsaiDenied(session)'), 'Expected bonsaiDenied response for unauthorized bonsai access');
-  assert.ok(content.includes('bonsaiDenied(session, \'Hermes\')'), 'Expected bonsaiDenied response for unauthorized hermes access');
+  // Hermes is an agent with tools and memory: summarizing through it would run a full agent turn.
+  assert.match(content, /modelRef\.source === 'hermes'[\s\S]{0,400}status: 400/, 'Expected Hermes to be refused with a 400');
+  assert.doesNotMatch(content, /createOpenAICompatible\(\{\s*name: 'hermes'/, 'Expected no Hermes model client in the summary route');
+  // A chat continued twice starts with a system-role hand-off, which the SDK rejects in messages.
+  assert.ok(content.includes('splitSystemMessages'), 'Expected system hand-offs to be lifted out of messages');
+  assert.doesNotMatch(content, /error instanceof Error \? error\.message/, 'Expected upstream errors not to reach the client');
 });
 
 test('model resolution for summary parses model references correctly', () => {
