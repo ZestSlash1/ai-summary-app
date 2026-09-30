@@ -48,19 +48,29 @@ function pickDefault(models: ModelOption[]): ModelOption {
 export function ModelSwitcher({
   value,
   onChange,
+  open: openProp,
+  onOpenChange,
   placement = "up",
   variant = "chip",
 }: {
   /** A "source::id" ref. Bare ids from older chats read with the old app-wide source. */
   value: string;
   onChange: (modelRef: string) => void;
+  /** Set to control the picker from outside (the composer's /model command). Unset, it opens itself. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   placement?: "up" | "down";
   variant?: "chip" | "field";
 }) {
   const { allowed: homeAllowed, status: gpu } = useHomeGpu({ pollMs: 30_000 });
   const [legacySource, setLegacySource] = useState<ModelSource | null>(null);
   const [catalogs, setCatalogs] = useState<Partial<Record<ModelSource, Catalog>>>({});
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = openProp ?? ownOpen;
+  function setOpen(next: boolean) {
+    if (openProp === undefined) setOwnOpen(next);
+    onOpenChange?.(next);
+  }
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [lockedNote, setLockedNote] = useState(false);
@@ -224,7 +234,7 @@ export function ModelSwitcher({
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={`Model: ${label}${local ? ", local" : entry?.free ? ", free" : ""}`}

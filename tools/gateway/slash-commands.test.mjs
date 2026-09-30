@@ -29,6 +29,24 @@ test('slash command detects command at start of input', () => {
   assert.equal(none, null);
 });
 
+// /model used to click document.querySelector('[aria-haspopup="listbox"]'), which matched nothing
+// (the picker is a dialog) and, with several chat tabs open, could reach another tab's picker.
+test('/model opens the chat panel\'s own model picker, not a global DOM query', () => {
+  const panel = readFileSync(new URL('../../components/ChatPanel.tsx', import.meta.url), 'utf8');
+  const modelCase = panel.match(/case "model": \{([\s\S]*?)\n\s*\}/)?.[1];
+  assert.ok(modelCase, 'Expected a case "model" branch in the slash command handler');
+  assert.ok(!modelCase.includes('document.'), '/model should not look the picker up in the DOM');
+  assert.match(modelCase, /setModelOpen\(true\)/);
+
+  const switcherProps = panel.match(/<ModelSwitcher((?:(?!\/>)[\s\S])*)\/>/)?.[1] ?? '';
+  assert.match(switcherProps, /open=\{modelOpen\}/, 'ChatPanel should control its picker\'s open state');
+  assert.match(switcherProps, /onOpenChange=\{setModelOpen\}/);
+
+  const switcher = readFileSync(new URL('../../components/ModelSwitcher.tsx', import.meta.url), 'utf8');
+  assert.match(switcher, /open\?: boolean;/);
+  assert.match(switcher, /onOpenChange\?: \(open: boolean\) => void;/);
+});
+
 test('checkpoint restore truncates message array at targeted index', () => {
   const messages = [
     { id: '1', role: 'user', content: 'First' },
