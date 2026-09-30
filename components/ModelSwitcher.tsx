@@ -8,14 +8,19 @@ import { fetchModelCatalog } from "@/lib/models";
 import { SOURCE_INFO, isQualifiedRef, parseModelRef, toModelRef } from "@/lib/modelRef";
 import { bonsaiState, useHomeGpu, type GpuState } from "@/lib/useHomeGpu";
 import { PopoverPanel } from "./Popover";
-import { BonsaiAccessNote } from "./GpuStatus";
+import { AccessNote } from "./GpuStatus";
 import { Segmented } from "./ui/Segmented";
 import { CHIP, FIELD } from "./ui/classes";
 
 type Catalog = { models: ModelOption[]; failed: boolean };
 type Kind = "local" | "free" | "paid";
 type Row = { ref: string; source: ModelSource; model: ModelOption; kind: Kind };
-type Group = { key: string; kind: Kind; title: string; note: string; rows: Row[]; locked?: boolean; state?: GpuState };
+/**
+ * A locked group shows one row that opens the reason instead of its models. Its rows are
+ * never listed; they let a search say how many locked models match instead of "no match".
+ */
+type Locked = { subject: "bonsai" | "paid"; label: string };
+type Group = { key: string; kind: Kind; title: string; note: string; rows: Row[]; locked?: Locked; state?: GpuState };
 type Filter = "all" | Kind;
 
 const BONSAI_NOTE: Record<GpuState, string> = {
@@ -58,12 +63,14 @@ export function ModelSwitcher({
   variant?: "chip" | "field";
 }) {
   const { allowed: homeAllowed, status: gpu } = useHomeGpu({ pollMs: 30_000 });
+  // The home PC and paid models share one allow list; the server enforces both.
+  const paidLocked = homeAllowed === false;
   const [legacySource, setLegacySource] = useState<ModelSource | null>(null);
   const [catalogs, setCatalogs] = useState<Partial<Record<ModelSource, Catalog>>>({});
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
-  const [lockedNote, setLockedNote] = useState(false);
+  const [lockedNote, setLockedNote] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const onChangeRef = useRef(onChange);
@@ -114,18 +121,25 @@ export function ModelSwitcher({
     }
     const catalog = catalogs[current.source];
     if (!catalog || catalog.models.length === 0) return; // unknown yet, or the PC is off: keep the choice
-    if (catalog.models.some((m) => m.id === current.id)) {
+    const usable = paidLocked ? catalog.models.filter((m) => m.free) : catalog.models;
+    if (usable.some((m) => m.id === current.id)) {
       if (!qualified) onChangeRef.current(toModelRef(current.source, current.id));
       return;
     }
-    onChangeRef.current(toModelRef(current.source, pickDefault(catalog.models).id));
-  }, [catalogs, qualified, legacySource, current.source, current.id, homeAllowed]);
+    // Gone from the catalog, or paid on an account limited to free models.
+    if (usable.length > 0) {
+      onChangeRef.current(toModelRef(current.source, pickDefault(usable).id));
+      return;
+    }
+    const freeGateway = catalogs.gateway?.models.find((m) => m.free);
+    if (freeGateway) onChangeRef.current(toModelRef("gateway", freeGateway.id));
+  }, [catalogs, qualified, legacySource, current.source, current.id, homeAllowed, paidLocked]);
 
   useEffect(() => {
     if (!open) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setQuery("");
-      setLockedNote(false);
+      setLockedNote(null);
       return;
     }
     if (window.matchMedia("(pointer: fine)").matches) window.setTimeout(() => searchRef.current?.focus(), 60);
@@ -137,7 +151,14 @@ export function ModelSwitcher({
       list.map((model) => ({ ref: toModelRef(source, model.id), source, model, kind }));
 
     if (homeAllowed === false) {
-      out.push({ key: "local", kind: "local", title: "On your PC", note: "Bonsai runs on the owner's home PC.", rows: [], locked: true });
+      out.push({
+        key: "local",
+        kind: "local",
+        title: "On your PC",
+        note: "Bonsai runs on the owner's home PC.",
+        rows: [],
+        locked: { subject: "bonsai", label: "Bonsai" },
+      });
     } else if (catalogs.bonsai) {
       const state = bonsaiNow ?? (catalogs.bonsai.failed ? "offline" : undefined);
       const ctxLabel = gpu?.bonsaiContext ? `${Math.round(gpu.bonsaiContext / 1024)}k context` : null;
@@ -178,24 +199,37 @@ export function ModelSwitcher({
         title: "Free on OmniRoute",
         note: "Free tiers routed through your OmniRoute server.",
         rows: rows("omniroute", "free", omni.filter((m) => m.free)),
-      },
-      {
-        key: "paid-gateway",
-        kind: "paid",
-        title: "AI Gateway · paid per token",
-        note: "Billed to your AI Gateway credits for every message.",
-        rows: rows("gateway", "paid", gateway.filter((m) => !m.free)),
-      },
-      {
-        key: "paid-omni",
-        kind: "paid",
-        title: "OmniRoute · your providers",
-        note: "Uses the accounts connected to your OmniRoute server.",
-        rows: rows("omniroute", "paid", omni.filter((m) => !m.free)),
       }
     );
+    if (paidLocked) {
+      out.push({
+        key: "paid",
+        kind: "paid",
+        title: "Paid models",
+        note: "Billed per token to the owner's AI Gateway and OmniRoute accounts.",
+        rows: [...rows("gateway", "paid", gateway.filter((m) => !m.free)), ...rows("omniroute", "paid", omni.filter((m) => !m.free))],
+        locked: { subject: "paid", label: "Paid models" },
+      });
+    } else {
+      out.push(
+        {
+          key: "paid-gateway",
+          kind: "paid",
+          title: "AI Gateway · paid per token",
+          note: "Billed to your AI Gateway credits for every message.",
+          rows: rows("gateway", "paid", gateway.filter((m) => !m.free)),
+        },
+        {
+          key: "paid-omni",
+          kind: "paid",
+          title: "OmniRoute · your providers",
+          note: "Uses the accounts connected to your OmniRoute server.",
+          rows: rows("omniroute", "paid", omni.filter((m) => !m.free)),
+        }
+      );
+    }
     return out;
-  }, [catalogs, homeAllowed, bonsaiNow, hermesState, gpu]);
+  }, [catalogs, homeAllowed, paidLocked, bonsaiNow, hermesState, gpu]);
 
   const visibleGroups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -297,18 +331,24 @@ export function ModelSwitcher({
                 <p className="mt-0.5 text-[11.5px] leading-snug text-nimbus-text-muted">{group.note}</p>
               </div>
               {group.locked ? (
-                lockedNote ? (
+                lockedNote === group.key ? (
                   <div className="px-1.5 pb-1.5">
-                    <BonsaiAccessNote compact />
+                    <AccessNote subject={group.locked.subject} compact />
                   </div>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setLockedNote(true)}
+                    onClick={() => setLockedNote(group.key)}
                     className="mx-1 flex w-[calc(100%-0.5rem)] items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-nimbus-text-faint transition-colors hover:bg-nimbus-surface-2 hover:text-nimbus-text-muted"
                   >
-                    <Cpu aria-hidden className="h-3.5 w-3.5" />
-                    <span className="flex-1">Bonsai</span>
+                    {group.locked.subject === "paid" ? (
+                      <Sparkles aria-hidden className="h-3.5 w-3.5" />
+                    ) : (
+                      <Cpu aria-hidden className="h-3.5 w-3.5" />
+                    )}
+                    <span className="flex-1">
+                      {group.rows.length > 0 ? `${group.rows.length} model${group.rows.length === 1 ? "" : "s"}` : group.locked.label}
+                    </span>
                     <span className="text-[11px]">Why locked?</span>
                   </button>
                 )
