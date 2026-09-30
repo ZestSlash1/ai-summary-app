@@ -82,7 +82,8 @@ export function PopoverPanel({
     const top = above ? rect.top - GAP - Math.min(h, maxH) : rect.bottom + GAP;
     const rawLeft = placement.endsWith("end") ? rect.right - w : rect.left;
     const left = Math.min(Math.max(rawLeft, EDGE), window.innerWidth - w - EDGE);
-    gsap.set(panel, { top, left, maxHeight: maxH, transformOrigin: `${placement.endsWith("end") ? "right" : "left"} ${above ? "bottom" : "top"}` });
+    // With a unit: GSAP left a bare number off max-height (it starts as "none"), so tall panels ran off screen.
+    gsap.set(panel, { top, left, maxHeight: `${maxH}px`, transformOrigin: `${placement.endsWith("end") ? "right" : "left"} ${above ? "bottom" : "top"}` });
   }
 
   useGSAP(
