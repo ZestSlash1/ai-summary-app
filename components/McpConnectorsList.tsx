@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Loader2, Trash2 } from "lucide-react";
 import type { McpConnector } from "@/lib/mcp";
 import { loadConnectors, saveConnectors } from "@/lib/mcp";
+import { BUTTON_PRIMARY, FIELD } from "./ui/classes";
 
 /** Core add/list/toggle UI for MCP connectors, with no positioning of its
- * own — embeddable inline (Settings page) or inside a popover (ChatPanel). */
+ * own. Embeddable inline (Settings page) or inside a popover (the composer). */
 export function McpConnectorsList({
   onConnectorsChange,
 }: {
@@ -46,7 +48,7 @@ export function McpConnectorsList({
         body: JSON.stringify({ url: url.trim(), authHeader: authHeader.trim() || undefined }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Couldn't connect.");
+      if (!res.ok) throw new Error(data.error ?? "Could not connect.");
 
       const connector: McpConnector = {
         id: crypto.randomUUID(),
@@ -61,16 +63,14 @@ export function McpConnectorsList({
       setUrl("");
       setAuthHeader("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't connect.");
+      setError(err instanceof Error ? err.message : "Could not connect.");
     } finally {
       setBusy(false);
     }
   }
 
   function toggle(id: string) {
-    persist(
-      connectors.map((c) => (c.id === id ? { ...c, enabled: !c.enabled } : c))
-    );
+    persist(connectors.map((c) => (c.id === id ? { ...c, enabled: !c.enabled } : c)));
   }
 
   function remove(id: string) {
@@ -78,78 +78,81 @@ export function McpConnectorsList({
   }
 
   return (
-    <div>
-      <div className="mb-3 flex flex-col gap-1.5">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1.5">
         {connectors.length === 0 && (
-          <p className="text-sm text-nimbus-text-muted">None added yet.</p>
+          <p className="rounded-lg border border-dashed border-nimbus-border px-3 py-2.5 text-[12.5px] text-nimbus-text-muted">
+            No connectors yet. Add a server URL below.
+          </p>
         )}
         {connectors.map((c) => (
           <div
             key={c.id}
-            className="flex items-center justify-between gap-2 rounded-xl border border-nimbus-border px-2.5 py-1.5"
+            className="flex items-center gap-2.5 rounded-lg border border-nimbus-border bg-nimbus-panel px-2.5 py-2"
           >
-            <div className="min-w-0">
-              <p className="truncate text-sm text-nimbus-text">{c.name}</p>
-              <p className="truncate text-xs text-nimbus-text-muted">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] text-nimbus-text">{c.name}</p>
+              <p className="truncate text-[11.5px] text-nimbus-text-muted">
                 {c.toolNames.length} tool{c.toolNames.length === 1 ? "" : "s"}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={() => toggle(c.id)}
-                className={`rounded-[var(--nimbus-radius-pill)] px-2 py-1 text-[11px] font-medium ${
-                  c.enabled
-                    ? "bg-nimbus-free-soft text-nimbus-free"
-                    : "bg-nimbus-bg text-nimbus-text-muted"
+            <button
+              type="button"
+              role="switch"
+              aria-checked={c.enabled}
+              aria-label={`${c.name} ${c.enabled ? "on" : "off"}`}
+              onClick={() => toggle(c.id)}
+              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-300 ${
+                c.enabled ? "bg-nimbus-accent" : "bg-nimbus-surface-3"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-300 ease-[var(--nimbus-ease)] ${
+                  c.enabled ? "translate-x-[18px]" : "translate-x-0.5"
                 }`}
-              >
-                {c.enabled ? "On" : "Off"}
-              </button>
-              <button
-                type="button"
-                onClick={() => remove(c.id)}
-                className="text-xs text-nimbus-text-muted hover:text-nimbus-text"
-              >
-                Remove
-              </button>
-            </div>
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => remove(c.id)}
+              aria-label={`Remove ${c.name}`}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-nimbus-text-faint transition-colors hover:bg-nimbus-danger-soft hover:text-nimbus-danger"
+            >
+              <Trash2 aria-hidden className="h-3.5 w-3.5" />
+            </button>
           </div>
         ))}
       </div>
 
-      <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-nimbus-text-muted">
-        Add a connector
-      </p>
-      <div className="flex flex-col gap-1.5">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Name (optional)"
-          className="rounded-lg border border-nimbus-border bg-nimbus-bg px-2 py-1.5 text-sm text-nimbus-text placeholder:text-nimbus-text-muted focus:outline-none"
-        />
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void addConnector();
+        }}
+        className="flex flex-col gap-1.5"
+      >
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (optional)" aria-label="Connector name" className={FIELD} />
         <input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://your-mcp-server.example.com"
-          className="rounded-lg border border-nimbus-border bg-nimbus-bg px-2 py-1.5 text-sm text-nimbus-text placeholder:text-nimbus-text-muted focus:outline-none"
+          aria-label="Server URL"
+          inputMode="url"
+          className={FIELD}
         />
         <input
           value={authHeader}
           onChange={(e) => setAuthHeader(e.target.value)}
           placeholder="Authorization header (optional)"
-          className="rounded-lg border border-nimbus-border bg-nimbus-bg px-2 py-1.5 text-sm text-nimbus-text placeholder:text-nimbus-text-muted focus:outline-none"
+          aria-label="Authorization header"
+          className={FIELD}
         />
-        <button
-          type="button"
-          onClick={addConnector}
-          disabled={busy || !url.trim()}
-          className="rounded-lg bg-nimbus-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
-        >
-          {busy ? "Connecting…" : "Connect & add"}
+        <button type="submit" disabled={busy || !url.trim()} className={`${BUTTON_PRIMARY} mt-1`}>
+          {busy && <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />}
+          {busy ? "Connecting" : "Connect and add"}
         </button>
-        {error && <p className="text-xs text-red-500">{error}</p>}
-      </div>
+        {error && <p role="alert" className="text-[12px] text-nimbus-danger">{error}</p>}
+      </form>
     </div>
   );
 }

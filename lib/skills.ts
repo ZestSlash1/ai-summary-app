@@ -15,7 +15,7 @@ export const BUILTIN_SKILLS: Skill[] = [
     description:
       "Commits AI-generated code straight to a GitHub repo as you go.",
     usageTip:
-      'Try: "push this to my repo" — I\'ll commit any tagged code blocks to the connected repo.',
+      "Code blocks tagged with a file path get a Push button under the reply. It commits them to the connected repo in one go.",
     keywords: [
       "push",
       "commit",

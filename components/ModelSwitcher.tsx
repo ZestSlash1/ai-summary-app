@@ -1,40 +1,76 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, Cpu, Search, Sparkles } from "lucide-react";
 import type { ModelOption } from "@/lib/types";
-import { loadModelSource } from "@/lib/storage";
+import { MODEL_SOURCE_EVENT, loadModelSource, saveModelSource, type ModelSource } from "@/lib/storage";
+import { fetchDefaultModelForSource, fetchModelCatalog } from "@/lib/models";
+import { useHomeGpu } from "@/lib/useHomeGpu";
 import { PopoverPanel, usePopoverDismiss } from "./Popover";
+import { Segmented } from "./ui/Segmented";
+import { CHIP, FIELD, MENU_ROW } from "./ui/classes";
 
+const SOURCE_LABEL: Record<ModelSource, string> = {
+  gateway: "AI Gateway",
+  omniroute: "OmniRoute",
+  bonsai: "Bonsai",
+};
+
+/**
+ * The model picker. The source (AI Gateway, OmniRoute, or Bonsai on the home PC) is
+ * switchable right here, so changing where models come from never needs a trip to Settings.
+ */
 export function ModelSwitcher({
   value,
   onChange,
+  placement = "up",
+  variant = "chip",
 }: {
   value: string;
   onChange: (modelId: string) => void;
+  placement?: "up" | "down";
+  variant?: "chip" | "field";
 }) {
+  const [source, setSource] = useState<ModelSource>("gateway");
   const [models, setModels] = useState<ModelOption[] | null>(null);
+  const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
+  const { allowed: bonsaiAllowed } = useHomeGpu();
+
+  // The source is a global setting: follow it when it changes anywhere in the app.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSource(loadModelSource());
+    const onSource = (e: Event) => setSource((e as CustomEvent<ModelSource>).detail);
+    window.addEventListener(MODEL_SOURCE_EVENT, onSource);
+    return () => window.removeEventListener(MODEL_SOURCE_EVENT, onSource);
+  }, []);
 
   useEffect(() => {
-    // Fetches on mount (so the pill shows a real label immediately) and
-    // again on every open (the model source is a global setting that can
-    // change on this same page — Settings, right next to the source
-    // toggle — so a mount-only fetch could show a stale list once opened).
     let cancelled = false;
-    const source = loadModelSource();
-    fetch(`/api/models?source=${source}`)
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data: ModelOption[]) => {
-        if (!cancelled) setModels(data);
+    fetchModelCatalog(source, open)
+      .then((data) => {
+        if (cancelled) return;
+        setModels(data);
+        setFailed(false);
       })
       .catch(() => {
-        if (!cancelled) setModels([]);
+        if (cancelled) return;
+        setModels([]);
+        setFailed(true);
       });
     return () => {
       cancelled = true;
     };
+  }, [source, open]);
+
+  useEffect(() => {
+    if (open) window.setTimeout(() => filterRef.current?.focus(), 60);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    else setFilter("");
   }, [open]);
 
   usePopoverDismiss(open, () => setOpen(false), rootRef);
@@ -46,80 +82,111 @@ export function ModelSwitcher({
     if (!models) return null;
     const q = filter.trim().toLowerCase();
     if (!q) return models;
-    return models.filter((m) => m.name.toLowerCase().includes(q));
+    return models.filter((m) => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q));
   }, [models, filter]);
+
+  async function changeSource(next: ModelSource) {
+    if (next === source) return;
+    setSource(next);
+    setModels(null);
+    saveModelSource(next);
+    onChange(await fetchDefaultModelForSource(next));
+  }
+
+  const sources: ModelSource[] = bonsaiAllowed ? ["gateway", "omniroute", "bonsai"] : ["gateway", "omniroute"];
+  const SourceIcon = source === "bonsai" ? Cpu : Sparkles;
 
   return (
     <div ref={rootRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-[var(--nimbus-radius-pill)] border border-nimbus-border bg-nimbus-surface px-3.5 py-2 text-sm font-medium text-nimbus-text shadow-[var(--nimbus-shadow)] transition-[transform,border-color] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-accent/40 active:scale-[0.97]"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        className={
+          variant === "chip"
+            ? CHIP
+            : "flex h-10 min-w-56 items-center gap-2 rounded-lg border border-nimbus-border bg-nimbus-surface px-3 text-[13px] text-nimbus-text transition-colors hover:border-nimbus-border-strong"
+        }
       >
-        <span className="max-w-[10rem] truncate">{label}</span>
+        <SourceIcon aria-hidden className="h-3.5 w-3.5 shrink-0" />
+        <span className={`truncate ${variant === "chip" ? "max-w-[9.5rem]" : "flex-1 text-left"}`}>{label}</span>
         {current?.free && (
-          <span className="rounded-[var(--nimbus-radius-pill)] bg-nimbus-free-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-nimbus-free">
+          <span className="rounded-[5px] bg-nimbus-free-soft px-1.5 py-px text-[10.5px] font-medium text-nimbus-free">
             Free
           </span>
         )}
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 10 10"
-          className={`text-nimbus-text-muted transition-transform duration-300 ease-[var(--nimbus-ease)] ${open ? "rotate-180" : ""}`}
-        >
-          <path
-            d="M1.5 3.5 5 7l3.5-3.5"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <ChevronDown
+          aria-hidden
+          className={`h-3.5 w-3.5 shrink-0 opacity-70 transition-transform duration-300 ${open ? "rotate-180" : ""}`}
+        />
       </button>
 
-      <PopoverPanel open={open} className="bottom-full left-0 mb-2 flex w-72 flex-col p-1.5">
-        {models !== null && models.length > 8 && (
-          <input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter models…"
-            className="mb-1.5 shrink-0 rounded-lg border border-nimbus-border bg-nimbus-bg px-2.5 py-1.5 text-sm text-nimbus-text placeholder:text-nimbus-text-muted focus:outline-none"
+      <PopoverPanel
+        open={open}
+        origin={placement === "up" ? "bottom left" : "top left"}
+        className={`${placement === "up" ? "bottom-full mb-2" : "top-full mt-2"} left-0 flex w-80 flex-col p-1.5`}
+      >
+        <div className="flex flex-col gap-2 p-1.5 pb-2">
+          <Segmented
+            label="Model source"
+            size="sm"
+            value={source}
+            onChange={changeSource}
+            options={sources.map((s) => ({ value: s, label: SOURCE_LABEL[s] }))}
           />
-        )}
-        <div className="max-h-64 overflow-y-auto">
+          <div className="relative">
+            <Search aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-nimbus-text-faint" />
+            <input
+              ref={filterRef}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder={`Search ${SOURCE_LABEL[source]} models`}
+              aria-label="Search models"
+              className={`${FIELD} pl-8`}
+            />
+          </div>
+        </div>
+        <div role="listbox" aria-label="Models" className="max-h-72 overflow-y-auto border-t border-nimbus-border pt-1.5">
           {models === null && (
-            <p className="px-3 py-2 text-sm text-nimbus-text-muted">Loading models…</p>
+            <div className="flex flex-col gap-1.5 p-2.5" aria-label="Loading models">
+              {[0, 1, 2, 3].map((i) => (
+                <span key={i} className="h-4 animate-pulse rounded bg-nimbus-surface-2" style={{ width: `${80 - i * 12}%` }} />
+              ))}
+            </div>
           )}
           {models?.length === 0 && (
-            <p className="px-3 py-2 text-sm text-nimbus-text-muted">Couldn&apos;t load models.</p>
+            <p className="px-2.5 py-3 text-[13px] leading-relaxed text-nimbus-text-muted">
+              {source === "bonsai"
+                ? "Bonsai is not answering. Check that the home PC is on."
+                : failed
+                  ? `Could not load models from ${SOURCE_LABEL[source]}.`
+                  : "No models available."}
+            </p>
           )}
           {filtered?.length === 0 && models && models.length > 0 && (
-            <p className="px-3 py-2 text-sm text-nimbus-text-muted">No matches.</p>
+            <p className="px-2.5 py-3 text-[13px] text-nimbus-text-muted">No models match.</p>
           )}
-          {filtered?.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => {
-                onChange(m.id);
-                setOpen(false);
-              }}
-              className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors duration-200 ease-[var(--nimbus-ease)] ${
-                m.id === value
-                  ? "bg-nimbus-accent-soft text-nimbus-accent"
-                  : "text-nimbus-text hover:bg-nimbus-bg"
-              }`}
-            >
-              <span className="truncate">{m.name}</span>
-              {m.free && (
-                <span className="shrink-0 rounded-[var(--nimbus-radius-pill)] bg-nimbus-free-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-nimbus-free">
-                  Free
-                </span>
-              )}
-            </button>
-          ))}
+          {filtered?.map((m) => {
+            const selected = m.id === value;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                onClick={() => {
+                  onChange(m.id);
+                  setOpen(false);
+                }}
+                className={`${MENU_ROW} ${selected ? "bg-nimbus-surface-2" : ""}`}
+              >
+                <span className="min-w-0 flex-1 truncate">{m.name}</span>
+                {m.free && <span className="text-[11px] text-nimbus-free">Free</span>}
+                <Check aria-hidden className={`h-3.5 w-3.5 shrink-0 text-nimbus-accent-text ${selected ? "" : "invisible"}`} />
+              </button>
+            );
+          })}
         </div>
       </PopoverPanel>
     </div>

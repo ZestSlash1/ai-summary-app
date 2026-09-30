@@ -2,27 +2,35 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { ArrowDown, Brain, ChevronRight, ImagePlus, ListChecks, RotateCw } from "lucide-react";
+import { gsap, useGSAP, Flip, reducedMotion } from "@/lib/motion";
 import { ModelSwitcher } from "./ModelSwitcher";
 import { RepoConnect } from "./RepoConnect";
 import { McpConnectors } from "./McpConnectors";
 import { SkillPrompt } from "./SkillPrompt";
-import { MessageText } from "./CodeBlock";
 import { MessageActions } from "./MessageActions";
 import { ThinkingIndicator } from "./ThinkingIndicator";
-import { HomeDashboard } from "./HomeDashboard";
+import { AssistantAvatar } from "./BrandMark";
+import { ImageJobCard } from "./ImageJobCard";
+import { MessageText } from "./chat/Markdown";
+import { ToolActivity, type ToolCall } from "./chat/ToolActivity";
+import { PushCard } from "./chat/PushCard";
+import { Composer } from "./chat/Composer";
+import {
+  WelcomeBanner,
+  WelcomeHero,
+  WelcomeSuggestions,
+  suggestionsFor,
+  useWelcomeIntro,
+} from "./chat/Welcome";
+import { CHIP } from "./ui/classes";
 import { extractPushableFiles } from "@/lib/codeBlocks";
 import type { McpConnector } from "@/lib/mcp";
 import type { Conversation, GithubRepoLink } from "@/lib/types";
 import { loadModelSource } from "@/lib/storage";
-import { ImagePlus, X } from "lucide-react";
-import { ImageJobCard } from "./ImageJobCard";
 import { useHomeGpu } from "@/lib/useHomeGpu";
-import { ACCEPTED_IMAGE_TYPES, ImageError, prepareImage, type PreparedImage } from "@/lib/imageResize";
-
-gsap.registerPlugin(useGSAP);
+import { ImageError, prepareImage, type PreparedImage } from "@/lib/imageResize";
 
 function textOf(message: UIMessage): string {
   return message.parts
@@ -49,53 +57,169 @@ function chatErrorText(err: Error): string {
   return "Something went wrong. Try again.";
 }
 
+type Part = UIMessage["parts"][number];
+
+/** A reply regrouped for display: consecutive tool calls become one timeline. */
+type Block =
+  | { kind: "text"; key: string; text: string }
+  | { kind: "reasoning"; key: string; text: string; live: boolean }
+  | { kind: "tools"; key: string; calls: ToolCall[] }
+  | { kind: "image"; key: string; url: string; filename?: string }
+  | { kind: "editImage"; key: string; part: Part };
+
+function toBlocks(parts: Part[]): Block[] {
+  const blocks: Block[] = [];
+  let tools: ToolCall[] | null = null;
+  const flush = () => {
+    if (tools?.length) blocks.push({ kind: "tools", key: `tools-${tools[0].id}`, calls: tools });
+    tools = null;
+  };
+
+  parts.forEach((part, i) => {
+    if (part.type === "step-start") return;
+    if (part.type === "reasoning") {
+      const p = part as { text?: string; reasoning?: string; state?: string };
+      const text = p.reasoning || p.text || "";
+      if (!text.trim()) return;
+      flush();
+      blocks.push({ kind: "reasoning", key: `r-${i}`, text, live: p.state === "streaming" });
+      return;
+    }
+    if (part.type === "tool-editImage") {
+      flush();
+      blocks.push({ kind: "editImage", key: `e-${i}`, part });
+      return;
+    }
+    if (part.type.startsWith("tool-") || part.type === "dynamic-tool") {
+      const p = part as {
+        type: string;
+        toolName?: string;
+        toolCallId?: string;
+        state: string;
+        input?: Record<string, unknown>;
+        output?: unknown;
+        errorText?: string;
+      };
+      (tools ??= []).push({
+        id: p.toolCallId ?? `t-${i}`,
+        name: p.type === "dynamic-tool" ? (p.toolName ?? "tool") : p.type.slice(5),
+        state: p.state,
+        input: p.input,
+        output: p.output && typeof p.output === "object" ? (p.output as Record<string, unknown>) : undefined,
+        errorText: p.errorText,
+      });
+      return;
+    }
+    flush();
+    if (part.type === "text") {
+      if (part.text.trim()) blocks.push({ kind: "text", key: `x-${i}`, text: part.text });
+    } else if (part.type === "file" && part.mediaType?.startsWith("image/")) {
+      blocks.push({ kind: "image", key: `f-${i}`, url: part.url, filename: part.filename });
+    }
+  });
+  flush();
+  return blocks;
+}
+
+/** The model's private reasoning, folded away by default. Opens and closes with a height tween. */
+function Reasoning({ text, live }: { text: string; live: boolean }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  function toggle(e: React.MouseEvent) {
+    e.preventDefault();
+    const details = detailsRef.current;
+    const body = bodyRef.current;
+    if (!details || !body) return;
+    const fast = reducedMotion();
+    gsap.killTweensOf(body);
+    if (!details.open) {
+      details.open = true;
+      gsap.fromTo(
+        body,
+        { height: 0, autoAlpha: 0 },
+        { height: "auto", autoAlpha: 1, duration: fast ? 0 : 0.45, ease: "aro", clearProps: "height" }
+      );
+    } else {
+      gsap.to(body, {
+        height: 0,
+        autoAlpha: 0,
+        duration: fast ? 0 : 0.25,
+        ease: "aro-in",
+        onComplete: () => {
+          details.open = false;
+          gsap.set(body, { clearProps: "all" });
+        },
+      });
+    }
+  }
+
+  return (
+    <details ref={detailsRef} className="group/reason my-1.5">
+      <summary
+        onClick={toggle}
+        className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-md py-0.5 text-[13px] text-nimbus-text-muted transition-colors hover:text-nimbus-text [&::-webkit-details-marker]:hidden"
+      >
+        <Brain aria-hidden className="h-3.5 w-3.5" />
+        <span className={live ? "aro-shimmer" : ""}>{live ? "Thinking" : "Thought process"}</span>
+        <ChevronRight
+          aria-hidden
+          className="h-3.5 w-3.5 transition-transform duration-300 group-open/reason:rotate-90"
+        />
+      </summary>
+      <div ref={bodyRef} className="overflow-hidden">
+        <div className="mb-2 mt-2 whitespace-pre-wrap border-l border-nimbus-border-strong pl-3.5 text-[13px] leading-relaxed text-nimbus-text-muted">
+          {text}
+        </div>
+      </div>
+    </details>
+  );
+}
+
 export function ChatPanel({
   conversationId,
+  active,
   initialMessages,
   model,
   onModelChange,
   onMessagesUpdate,
   githubRepo,
   onRepoChange,
-  conversations,
+  lastConversation,
   userName,
+  signedIn,
   onSelectConversation,
-  onNewChat,
+  onStreamingChange,
 }: {
   conversationId: string;
+  active: boolean;
   initialMessages: UIMessage[];
   model: string;
-  onModelChange: (model: string) => void;
-  onMessagesUpdate: (messages: UIMessage[]) => void;
+  onModelChange: (conversationId: string, model: string) => void;
+  onMessagesUpdate: (conversationId: string, messages: UIMessage[]) => void;
   githubRepo?: GithubRepoLink;
-  onRepoChange: (repo: GithubRepoLink | undefined) => void;
-  conversations: Conversation[];
+  onRepoChange: (conversationId: string, repo: GithubRepoLink | undefined) => void;
+  lastConversation?: Conversation;
   userName?: string | null;
+  signedIn: boolean;
   onSelectConversation: (id: string) => void;
-  onNewChat: () => void;
+  onStreamingChange: (conversationId: string, streaming: boolean) => void;
 }) {
   const modelRef = useRef(model);
-  useEffect(() => {
-    modelRef.current = model;
-  }, [model]);
-
+  const repoRef = useRef(githubRepo);
   const [enabledConnectors, setEnabledConnectors] = useState<McpConnector[]>([]);
   const connectorsRef = useRef(enabledConnectors);
+  const [plan, setPlan] = useState(false);
+  const planRef = useRef(plan);
   useEffect(() => {
-    connectorsRef.current = enabledConnectors;
-  }, [enabledConnectors]);
-
-  const repoRef = useRef(githubRepo);
-  useEffect(() => {
+    modelRef.current = model;
     repoRef.current = githubRepo;
-  }, [githubRepo]);
+    connectorsRef.current = enabledConnectors;
+    planRef.current = plan;
+  }, [model, githubRepo, enabledConnectors, plan]);
 
-  const [pushStatus, setPushStatus] = useState<
-    { state: "pushed" | "error"; label: string } | undefined
-  >();
-
-  // Reads modelRef/connectorsRef at request time (not render time), so the
-  // transport always sends the latest state without needing to be recreated.
+  // Reads the refs at request time (not render time), so the transport always sends
+  // the latest settings without being recreated.
   /* eslint-disable react-hooks/refs */
   const [transport] = useState(
     () =>
@@ -108,119 +232,103 @@ export function ChatPanel({
             .filter((c) => c.enabled)
             .map((c) => ({ url: c.url, authHeader: c.authHeader })),
           githubRepo: repoRef.current,
+          plan: planRef.current,
         }),
       })
   );
   /* eslint-enable react-hooks/refs */
 
-  async function pushMessageCode(message: UIMessage) {
-    const repo = repoRef.current;
-    if (!repo) return;
-    const texts = message.parts
-      .filter((p) => p.type === "text")
-      .map((p) => (p as { text: string }).text);
-    const files = extractPushableFiles(texts);
-    if (files.length === 0) return;
-
-    try {
-      const res = await fetch("/api/github/push", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          owner: repo.owner,
-          repo: repo.name,
-          branch: repo.branch,
-          files,
-          message: `ARO: update ${files.length} file${files.length === 1 ? "" : "s"}`,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      setPushStatus({
-        state: "pushed",
-        label: `Pushed ${files.length} file${files.length === 1 ? "" : "s"} to ${repo.owner}/${repo.name}`,
-      });
-      // Keep project memory current with what was just pushed. Best-effort:
-      // a failed ingest shouldn't surface as a push failure to the user.
-      fetch("/api/memory/ingest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repo: `${repo.owner}/${repo.name}`, files }),
-      }).catch(() => {});
-    } catch {
-      setPushStatus({ state: "error", label: "Push failed" });
-    }
-  }
-
-  const { messages, sendMessage, status, error, regenerate } = useChat({
+  const { messages, sendMessage, status, error, regenerate, stop } = useChat({
     id: conversationId,
     messages: initialMessages,
     transport,
-    onFinish: ({ message }) => {
-      pushMessageCode(message);
-    },
   });
 
-  const [input, setInput] = useState("");
-  const [mcpOpen, setMcpOpen] = useState(false);
-  const [repoPromptOpen, setRepoPromptOpen] = useState(false);
-
-  // Image editing: only shown to accounts allowed to use the home GPU.
-  const { allowed: canEditImages } = useHomeGpu();
-  const [attachment, setAttachment] = useState<PreparedImage | null>(null);
-  const [attachError, setAttachError] = useState<string | null>(null);
-  const [preparing, setPreparing] = useState(false);
-  const [dragging, setDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const sendIconRef = useRef<HTMLSpanElement>(null);
-  const seenIds = useRef<Set<string>>(new Set());
-
   const isStreaming = status === "streaming" || status === "submitted";
+  const isEmpty = messages.length === 0;
   const lastMessage = messages[messages.length - 1];
-  const isThinking =
-    isStreaming &&
-    (!lastMessage ||
-      lastMessage.role !== "assistant" ||
-      !lastMessage.parts.some((p) => p.type === "text" && p.text.trim()));
-
+  const awaitingReply = isStreaming && lastMessage?.role === "user";
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
+  const lastUserText = useMemo(() => {
+    const last = [...messages].reverse().find((m) => m.role === "user");
+    return last ? textOf(last) : "";
+  }, [messages]);
 
-  const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
-  const lastUserText =
-    lastUserMessage?.parts.find((p) => p.type === "text" && "text" in p) as
-      | { text: string }
-      | undefined;
+  // Persist when a turn starts (so the title and the user's message land right away)
+  // and when it settles. Never per token: signed-in users write to the database.
+  const persistRef = useRef(onMessagesUpdate);
+  const messagesRef = useRef(messages);
+  const statusRef = useRef(status);
+  const stopRef = useRef(stop);
+  const streamingChangeRef = useRef(onStreamingChange);
+  useEffect(() => {
+    persistRef.current = onMessagesUpdate;
+    messagesRef.current = messages;
+    stopRef.current = stop;
+    streamingChangeRef.current = onStreamingChange;
+  });
+  useEffect(() => {
+    const prev = statusRef.current;
+    statusRef.current = status;
+    if (prev === status) return;
+    const started = status === "submitted";
+    const settled = (prev === "streaming" || prev === "submitted") && (status === "ready" || status === "error");
+    if (started || settled) persistRef.current(conversationId, messages);
+  }, [status, messages, conversationId]);
 
   useEffect(() => {
-    // Skip mid-stream: `messages` updates on every token, and for signed-in
-    // users each update now triggers a real network write, not just a
-    // localStorage write. Persist once a turn settles instead of on every
-    // chunk — still "every message exchange", just not every token of one.
-    if (isStreaming) return;
-    onMessagesUpdate(messages);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, isStreaming]);
+    streamingChangeRef.current(conversationId, isStreaming);
+  }, [isStreaming, conversationId]);
 
-  // Guards against a double-send: `status` only updates once React
-  // re-renders after sendMessage's first tick, leaving a brief window where
-  // a fast double-click/double-Enter can fire the request twice. This ref
-  // closes that window synchronously; the effect below releases it on the
-  // very next status change of any kind (streaming, finished, OR errored —
-  // must not wait specifically for "streaming", since a fast-failing
-  // request can go straight to an error status and never pass through it,
-  // which would otherwise latch the guard closed forever).
+  // Closing a tab mid-reply keeps what arrived so far instead of losing it.
+  useEffect(
+    () => () => {
+      streamingChangeRef.current(conversationId, false);
+      if (statusRef.current === "streaming" || statusRef.current === "submitted") {
+        persistRef.current(conversationId, messagesRef.current);
+        stopRef.current();
+      }
+    },
+    [conversationId]
+  );
+
+  // Guards against a double send: `status` only updates after a re-render, which leaves
+  // a brief window where a fast double Enter fires twice. Released on any status change.
   const sendingRef = useRef(false);
   useEffect(() => {
     sendingRef.current = false;
   }, [status]);
 
+  const [input, setInput] = useState("");
+  const [mcpOpen, setMcpOpen] = useState(false);
+  const [repoPromptOpen, setRepoPromptOpen] = useState(false);
+  // When the current turn began, and whether it went to Bonsai (slow first reply after a nap).
+  const [turn, setTurn] = useState({ startedAt: 0, bonsai: false });
+
+  // Image editing: only offered to accounts allowed to use the home GPU.
+  const { allowed: canEditImages } = useHomeGpu();
+  const [attachment, setAttachment] = useState<PreparedImage | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [dragging, setDragging] = useState(false);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const flipState = useRef<ReturnType<typeof Flip.getState> | null>(null);
+  const stickToBottom = useRef(true);
+  const [showJump, setShowJump] = useState(false);
+
   function trySend(text: string, image?: PreparedImage | null) {
     if (!text.trim() || isStreaming || sendingRef.current) return;
     sendingRef.current = true;
+    // The composer glides from the middle of the empty screen to its docked spot.
+    if (isEmpty && composerRef.current) flipState.current = Flip.getState(composerRef.current);
+    stickToBottom.current = true;
+    setTurn({ startedAt: Date.now(), bonsai: loadModelSource() === "bonsai" });
     if (image) {
       sendMessage({
         text,
@@ -231,8 +339,7 @@ export function ChatPanel({
     }
   }
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  function submit() {
     if (!input.trim() || preparing) return;
     trySend(input, attachment);
     setInput("");
@@ -241,11 +348,12 @@ export function ChatPanel({
   }
 
   async function attachFile(file: File | undefined) {
-    if (!file) return;
+    if (!file || !canEditImages) return;
     setAttachError(null);
     setPreparing(true);
     try {
       setAttachment(await prepareImage(file));
+      textareaRef.current?.focus();
     } catch (err) {
       setAttachError(err instanceof ImageError ? err.message : "That image could not be used.");
     } finally {
@@ -253,397 +361,434 @@ export function ChatPanel({
     }
   }
 
-  function handleSuggestion(text: string) {
-    trySend(text);
+  function retry() {
+    setTurn({ startedAt: Date.now(), bonsai: loadModelSource() === "bonsai" });
+    void regenerate();
   }
 
+  useWelcomeIntro(containerRef, composerRef, isEmpty);
+
+  // First message: play the composer's glide recorded in trySend, then fade the thread in.
+  useLayoutEffect(() => {
+    if (isEmpty || !flipState.current) return;
+    const state = flipState.current;
+    flipState.current = null;
+    const fast = reducedMotion();
+    Flip.from(state, { targets: composerRef.current, duration: fast ? 0 : 0.8, ease: "aro" });
+    gsap.from(listRef.current, { autoAlpha: 0, y: 12, duration: fast ? 0 : 0.6, delay: fast ? 0 : 0.2, ease: "aro" });
+  }, [isEmpty]);
+
+  // Messages rise in as they arrive. Ones already on screen when a chat opens get a short stagger.
+  const seenIds = useRef<Set<string> | null>(null);
   useGSAP(
     () => {
-      const nodes = scrollRef.current?.querySelectorAll("[data-message]");
-      nodes?.forEach((node) => {
-        const id = node.getAttribute("data-message");
-        if (!id || seenIds.current.has(id)) return;
+      const nodes = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-message]") ?? []);
+      const fast = reducedMotion();
+      if (seenIds.current === null) {
+        // Recorded after a frame so React's dev double-run replays this intro instead of skipping it.
+        const ids = new Set(nodes.map((n) => n.dataset.message!));
+        requestAnimationFrame(() => (seenIds.current ??= ids));
+        if (!fast && nodes.length) {
+          gsap.from(nodes.slice(-6), { autoAlpha: 0, y: 10, duration: 0.5, stagger: 0.05, ease: "aro" });
+        }
+        return;
+      }
+      for (const node of nodes) {
+        const id = node.dataset.message!;
+        if (seenIds.current.has(id)) continue;
         seenIds.current.add(id);
-        gsap.fromTo(
-          node,
-          { opacity: 0, y: 14, scale: 0.98, filter: "blur(4px)" },
-          {
-            opacity: 1,
-            y: 0,
-            scale: 1,
-            filter: "blur(0px)",
-            duration: 0.55,
-            ease: "power3.out",
-          }
-        );
-      });
+        if (fast) continue;
+        if (node.dataset.role === "user") {
+          gsap.from(node, { autoAlpha: 0, y: 16, scale: 0.97, transformOrigin: "100% 100%", duration: 0.55, ease: "aro" });
+        } else {
+          gsap.from(node, { autoAlpha: 0, y: 8, duration: 0.5, ease: "aro" });
+        }
+      }
     },
-    { dependencies: [messages], scope: containerRef }
+    { dependencies: [messages.length], scope: listRef }
   );
 
+  // Follow the bottom while the reply grows, unless the reader scrolled up to look at something.
   useEffect(() => {
-    if (!bottomRef.current) return;
-    bottomRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, isThinking]);
+    const scroller = scrollRef.current;
+    const list = listRef.current;
+    if (!scroller || !list || isEmpty) return;
+    const pin = () => {
+      if (stickToBottom.current) scroller.scrollTop = scroller.scrollHeight;
+    };
+    pin();
+    const observer = new ResizeObserver(pin);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [isEmpty]);
 
-  function handleSendPointerEnter() {
-    if (!sendIconRef.current) return;
-    gsap.to(sendIconRef.current, {
-      x: 1.5,
-      y: -1.5,
-      scale: 1.08,
-      duration: 0.3,
-      ease: "power2.out",
-    });
+  useEffect(() => {
+    if (awaitingReply && scrollRef.current) {
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: reducedMotion() ? "auto" : "smooth" });
+    }
+  }, [awaitingReply]);
+
+  function onScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickToBottom.current = distance < 80;
+    setShowJump(distance > 240);
   }
 
-  function handleSendPointerLeave() {
-    if (!sendIconRef.current) return;
-    gsap.to(sendIconRef.current, { x: 0, y: 0, scale: 1, duration: 0.35, ease: "power2.out" });
+  function jumpToLatest() {
+    stickToBottom.current = true;
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: reducedMotion() ? "auto" : "smooth" });
   }
+
+  // "/" focuses the composer from anywhere in the active tab, like most chat apps.
+  useEffect(() => {
+    if (!active) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable=true]")) return;
+      e.preventDefault();
+      textareaRef.current?.focus();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [active]);
+
+  // Focus the composer when this tab comes to the front (not on touch, where it opens the keyboard).
+  useEffect(() => {
+    if (active && window.matchMedia("(pointer: fine)").matches) textareaRef.current?.focus();
+  }, [active]);
+
+  function onDragOver(e: DragEvent) {
+    if (!canEditImages || !Array.from(e.dataTransfer.types).includes("Files")) return;
+    e.preventDefault();
+    setDragging(true);
+  }
+  function onDragLeave(e: DragEvent) {
+    if (!containerRef.current?.contains(e.relatedTarget as Node | null)) setDragging(false);
+  }
+  function onDrop(e: DragEvent) {
+    if (!canEditImages) return;
+    e.preventDefault();
+    setDragging(false);
+    void attachFile(e.dataTransfer.files[0]);
+  }
+
+  const firstName = userName?.trim().split(/\s+/)[0];
+  const enabledCount = enabledConnectors.filter((c) => c.enabled).length;
+  const placeholder = attachment
+    ? "Describe the change you want"
+    : githubRepo
+      ? `Ask about ${githubRepo.name}, or have ARO write code`
+      : "Ask ARO to write, explain, or fix code";
+
+  const controls = (
+    <>
+      <ModelSwitcher value={model} onChange={(m) => onModelChange(conversationId, m)} />
+      <RepoConnect
+        value={githubRepo}
+        onChange={(repo) => onRepoChange(conversationId, repo)}
+        forceOpen={repoPromptOpen}
+        onForceOpenHandled={() => setRepoPromptOpen(false)}
+      />
+      <McpConnectors
+        open={mcpOpen}
+        onOpenChange={setMcpOpen}
+        onConnectorsChange={setEnabledConnectors}
+        enabledCount={enabledCount}
+      />
+      <button
+        type="button"
+        aria-pressed={plan}
+        onClick={() => setPlan((p) => !p)}
+        title="Plan mode: ARO outlines the steps before doing the work"
+        className={`${CHIP} ${plan ? "border-nimbus-accent/40 bg-nimbus-accent-soft text-nimbus-accent-text hover:bg-nimbus-accent-soft hover:text-nimbus-accent-text" : ""}`}
+      >
+        <ListChecks aria-hidden className="h-3.5 w-3.5" />
+        Plan
+      </button>
+    </>
+  );
 
   return (
     <div
       ref={containerRef}
-      className="relative flex flex-1 flex-col items-center overflow-hidden px-4 pb-4 pt-20 sm:px-6 sm:pb-8 sm:pt-12 md:pt-8"
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className="relative flex h-full min-h-0 flex-col"
     >
+      {isEmpty && (
+        <div className="absolute inset-x-0 top-4 z-10 flex justify-center">
+          <WelcomeBanner signedIn={signedIn} repo={githubRepo} onConnectRepo={() => setRepoPromptOpen(true)} />
+        </div>
+      )}
+
       <div
-        className={`relative z-10 flex w-full flex-1 flex-col gap-6 overflow-hidden ${
-          messages.length === 0 ? "max-w-3xl" : "max-w-2xl"
-        }`}
+        ref={scrollRef}
+        onScroll={isEmpty ? undefined : onScroll}
+        className={
+          isEmpty
+            ? "flex flex-[1.1] flex-col justify-end pb-7 pt-16"
+            : "relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]"
+        }
       >
-        {messages.length === 0 ? (
-          <HomeDashboard
-            userName={userName}
-            conversations={conversations}
-            activeConversationId={conversationId}
-            githubRepo={githubRepo}
-            onSelectConversation={onSelectConversation}
-            onNewChat={onNewChat}
-            onConnectRepo={() => setRepoPromptOpen(true)}
-            onSuggestion={handleSuggestion}
-          />
+        {isEmpty ? (
+          <WelcomeHero firstName={firstName} />
         ) : (
-          <div
-            ref={scrollRef}
-            className="flex flex-1 flex-col gap-4 overflow-y-auto pr-1"
-          >
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                data-message={message.id}
-                className={
-                  message.role === "user"
-                    ? "group self-end max-w-[80%]"
-                    : "group self-start max-w-[80%]"
-                }
-              >
+          <div ref={listRef} className="mx-auto flex w-full max-w-[740px] flex-col gap-8 px-4 pb-10 pt-8 sm:px-6">
+            {messages.map((message) => {
+              if (message.role === "user") {
+                const text = textOf(message);
+                const images = message.parts.filter(
+                  (p): p is Extract<Part, { type: "file" }> => p.type === "file" && Boolean(p.mediaType?.startsWith("image/"))
+                );
+                return (
+                  <div key={message.id} data-message={message.id} data-role="user" className="flex flex-col items-end gap-2 pl-10">
+                    {images.map((img, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element -- the user's own attachment, a data URL
+                      <img
+                        key={i}
+                        src={img.url}
+                        alt={img.filename ? `Attached image: ${img.filename}` : "Attached image"}
+                        className="max-h-56 w-auto max-w-full rounded-[14px] border border-nimbus-border"
+                      />
+                    ))}
+                    {text && (
+                      <div className="max-w-full whitespace-pre-wrap break-words rounded-[18px] rounded-br-[6px] bg-nimbus-surface-2 px-4 py-2.5 text-[14.5px] leading-relaxed text-nimbus-text">
+                        {text}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              const isLive = isStreaming && message.id === lastMessage?.id;
+              const blocks = toBlocks(message.parts);
+              const hasText = blocks.some((b) => b.kind === "text");
+              const hasTools = blocks.some((b) => b.kind === "tools");
+              const files = !isLive && githubRepo ? extractPushableFiles([textOf(message)]) : [];
+              const isLast = message.id === lastAssistantId;
+
+              return (
                 <div
-                  className={
-                    message.role === "user"
-                      ? "rounded-[var(--nimbus-radius-card)] rounded-br-lg bg-nimbus-accent px-4 py-3 text-sm leading-relaxed text-[var(--nimbus-on-accent)] shadow-[var(--nimbus-shadow)]"
-                      : "rounded-[var(--nimbus-radius-card)] rounded-bl-lg border border-nimbus-border bg-nimbus-surface px-4 py-3 text-sm leading-relaxed text-nimbus-text shadow-[var(--nimbus-inset-highlight),var(--nimbus-shadow)]"
-                  }
+                  key={message.id}
+                  data-message={message.id}
+                  data-role="assistant"
+                  data-last={isLast}
+                  className="group flex gap-3.5"
                 >
-                  {message.parts.map((part, i) => {
-                    if (part.type === "reasoning") {
-                      const reasoningText =
-                        (part as { reasoning?: string; text?: string }).reasoning ||
-                        (part as { text?: string }).text ||
-                        "";
-                      if (!reasoningText.trim()) return null;
-                      return (
-                        <details
-                          key={i}
-                          className="my-2 rounded-lg border border-nimbus-border/60 bg-nimbus-bg/60 px-3 py-1.5 text-xs text-nimbus-text-muted"
-                        >
-                          <summary className="cursor-pointer select-none font-medium text-nimbus-text-muted transition-colors hover:text-nimbus-text">
-                            Thought process
-                          </summary>
-                          <div className="mt-1.5 whitespace-pre-wrap leading-relaxed opacity-90">
-                            {reasoningText}
-                          </div>
-                        </details>
-                      );
-                    }
-                    if (part.type === "file" && part.mediaType?.startsWith("image/")) {
-                      return (
-                        // eslint-disable-next-line @next/next/no-img-element -- user's own attachment, a data URL
-                        <img
-                          key={i}
-                          src={part.url}
-                          alt={part.filename ? `Attached image: ${part.filename}` : "Attached image"}
-                          className="mb-2 block max-h-56 w-auto max-w-full rounded-xl"
-                        />
-                      );
-                    }
-                    if (part.type === "tool-editImage") {
-                      const p = part as {
-                        state: string;
-                        input?: { instruction?: string };
-                        output?: { jobId?: string; error?: string };
-                        errorText?: string;
-                      };
-                      const canRetry = message.id === lastAssistantId && !isStreaming;
-                      const onRetry = canRetry ? () => regenerate() : undefined;
-                      if (p.state === "output-available" && p.output?.jobId) {
-                        return (
-                          <ImageJobCard
-                            key={i}
-                            jobId={p.output.jobId}
-                            instruction={p.input?.instruction}
-                            onRetry={onRetry}
-                          />
-                        );
+                  <AssistantAvatar live={isLive} />
+                  <div className="min-w-0 flex-1 pt-[3px]">
+                    {blocks.map((block) => {
+                      switch (block.kind) {
+                        case "reasoning":
+                          return <Reasoning key={block.key} text={block.text} live={block.live && isLive} />;
+                        case "tools":
+                          return <ToolActivity key={block.key} calls={block.calls} />;
+                        case "text":
+                          return <MessageText key={block.key} text={block.text} streaming={isLive} />;
+                        case "image":
+                          return (
+                            // eslint-disable-next-line @next/next/no-img-element -- inline image part, a data URL
+                            <img
+                              key={block.key}
+                              src={block.url}
+                              alt={block.filename ? `Image: ${block.filename}` : "Image"}
+                              className="my-2 block max-h-72 w-auto max-w-full rounded-[14px] border border-nimbus-border"
+                            />
+                          );
+                        case "editImage": {
+                          const p = block.part as {
+                            state: string;
+                            input?: { instruction?: string };
+                            output?: { jobId?: string; error?: string };
+                            errorText?: string;
+                          };
+                          const onRetry = isLast && !isStreaming ? retry : undefined;
+                          if (p.state === "output-available" && p.output?.jobId) {
+                            return (
+                              <ImageJobCard key={block.key} jobId={p.output.jobId} instruction={p.input?.instruction} onRetry={onRetry} />
+                            );
+                          }
+                          if (p.state === "output-available" || p.state === "output-error") {
+                            return (
+                              <ImageJobCard
+                                key={block.key}
+                                error={p.output?.error || p.errorText || "The edit could not start."}
+                                instruction={p.input?.instruction}
+                                onRetry={onRetry}
+                              />
+                            );
+                          }
+                          return (
+                            <div key={block.key} className="mt-2 flex w-full max-w-[22rem] flex-col gap-2">
+                              <div className="nimbus-sheen relative aspect-square w-full overflow-hidden rounded-[14px] border border-nimbus-border bg-nimbus-surface" />
+                              <p role="status" aria-live="polite" className="px-1 text-[13px] text-nimbus-text-muted">
+                                Sending your image to the GPU
+                              </p>
+                            </div>
+                          );
+                        }
                       }
-                      if (p.state === "output-available" || p.state === "output-error") {
-                        return (
-                          <ImageJobCard
-                            key={i}
-                            error={p.output?.error || p.errorText || "The edit could not start."}
-                            instruction={p.input?.instruction}
-                            onRetry={onRetry}
-                          />
-                        );
-                      }
-                      return (
-                        <div key={i} className="mt-2 flex w-full max-w-[22rem] flex-col gap-2">
-                          <div className="nimbus-sheen relative aspect-square w-full overflow-hidden rounded-[var(--nimbus-radius-card)] border border-nimbus-border bg-nimbus-bg" />
-                          <p role="status" aria-live="polite" className="px-1 text-sm font-medium">
-                            Sending your image to the GPU
-                          </p>
-                        </div>
-                      );
-                    }
-                    if (part.type === "text") {
-                      const isLiveAssistantText =
-                        isStreaming &&
-                        message.role === "assistant" &&
-                        message.id === lastMessage?.id;
-                      return (
-                        <MessageText key={i} text={part.text} streaming={isLiveAssistantText} />
-                      );
-                    }
-                    if (part.type.startsWith("tool-")) {
-                      return (
-                        <div
-                          key={i}
-                          className="mt-2 flex items-center gap-1.5 text-xs text-nimbus-text-muted"
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-nimbus-accent" />
-                          used tool: {part.type.replace("tool-", "")}
-                        </div>
-                      );
-                    }
-                    return null;
-                  })}
+                    })}
+
+                    {isLive && !hasText && (
+                      <ThinkingIndicator
+                        key={turn.startedAt}
+                        since={turn.startedAt}
+                        label={hasTools ? "Working" : "Thinking"}
+                        bonsai={turn.bonsai}
+                      />
+                    )}
+
+                    {!isLive && (
+                      <MessageActions
+                        text={textOf(message)}
+                        showRegenerate={isLast && !isStreaming}
+                        onRegenerate={retry}
+                      />
+                    )}
+
+                    {files.length > 0 && githubRepo && <PushCard files={files} repo={githubRepo} />}
+                  </div>
                 </div>
-                {message.role === "assistant" && (
-                  <MessageActions
-                    text={textOf(message)}
-                    showRegenerate={message.id === lastAssistantId && !isStreaming}
-                    onRegenerate={() => regenerate()}
-                  />
-                )}
+              );
+            })}
+
+            {awaitingReply && (
+              <div className="flex gap-3.5" data-pending>
+                <AssistantAvatar live />
+                <div className="pt-[3px]">
+                  <ThinkingIndicator key={turn.startedAt} since={turn.startedAt} bonsai={turn.bonsai} />
+                </div>
               </div>
-            ))}
-
-            {isThinking && <ThinkingIndicator />}
-
-            <div ref={bottomRef} />
+            )}
           </div>
         )}
+      </div>
 
-        {lastUserText && !isStreaming && (
-          <SkillPrompt
-            latestUserText={lastUserText.text}
-            githubRepo={githubRepo}
-            hasEnabledMcp={enabledConnectors.some((c) => c.enabled)}
-            onConnectRepo={() => setRepoPromptOpen(true)}
-            onOpenMcp={() => setMcpOpen(true)}
-          />
+      <div className="relative shrink-0 px-3 pb-3 sm:px-5 sm:pb-4">
+        {!isEmpty && (
+          <>
+            <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-10 h-10 bg-gradient-to-t from-nimbus-panel to-transparent" />
+            <button
+              type="button"
+              onClick={jumpToLatest}
+              aria-label="Jump to the latest message"
+              tabIndex={showJump ? 0 : -1}
+              className={`absolute -top-12 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-nimbus-border-strong bg-nimbus-surface text-nimbus-text-muted shadow-[var(--nimbus-shadow)] transition-[opacity,transform,color] duration-300 ease-[var(--nimbus-ease)] hover:text-nimbus-text ${
+                showJump ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"
+              }`}
+            >
+              <ArrowDown aria-hidden className="h-4 w-4" />
+            </button>
+          </>
         )}
 
-        {error && (
-          <div
-            role="alert"
-            className="rounded-2xl border border-nimbus-border bg-nimbus-surface px-4 py-3 text-sm text-nimbus-text shadow-[var(--nimbus-shadow)]"
-          >
-            <p>{chatErrorText(error)}</p>
-            {!isStreaming && (
+        <div className="mx-auto flex w-full max-w-[740px] flex-col gap-2.5 sm:px-1">
+          {active && lastUserText && !isStreaming && (
+            <SkillPrompt
+              latestUserText={lastUserText}
+              githubRepo={githubRepo}
+              hasEnabledMcp={enabledCount > 0}
+              onConnectRepo={() => setRepoPromptOpen(true)}
+              onOpenMcp={() => setMcpOpen(true)}
+            />
+          )}
+
+          {error && !isStreaming && (
+            <div
+              role="alert"
+              className="flex items-center gap-3 rounded-[12px] border border-nimbus-danger/25 bg-nimbus-danger-soft px-3.5 py-2.5 text-[13px] text-nimbus-text"
+            >
+              <p className="min-w-0 flex-1">{chatErrorText(error)}</p>
               <button
                 type="button"
-                onClick={() => regenerate()}
-                className="mt-2 min-h-11 rounded-[var(--nimbus-radius-pill)] border border-nimbus-border px-3.5 text-xs font-medium text-nimbus-text-muted transition-[color,transform] duration-300 ease-[var(--nimbus-ease)] hover:text-nimbus-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nimbus-accent active:scale-95 sm:min-h-9"
+                onClick={retry}
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-nimbus-border-strong bg-nimbus-surface px-2.5 text-[12.5px] font-medium text-nimbus-text transition-[background-color,transform] hover:bg-nimbus-surface-2 active:scale-95"
               >
+                <RotateCw aria-hidden className="h-3.5 w-3.5" />
                 Try again
               </button>
-            )}
-          </div>
-        )}
-
-        {canEditImages && (attachment || attachError || preparing) && (
-          <div className="flex flex-col gap-2">
-            {preparing && (
-              <p role="status" className="px-1 text-xs text-nimbus-text-muted">
-                Preparing the image…
-              </p>
-            )}
-            {attachment && (
-              <div className="flex items-center gap-3 rounded-[var(--nimbus-radius-card)] border border-nimbus-border bg-nimbus-surface p-2 pr-3 shadow-[var(--nimbus-shadow)]">
-                {/* eslint-disable-next-line @next/next/no-img-element -- local preview of the picked file */}
-                <img src={attachment.dataUrl} alt="" className="h-14 w-14 shrink-0 rounded-xl object-cover" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-nimbus-text">{attachment.name}</p>
-                  <p className="text-xs text-nimbus-text-muted">Ready to edit. Describe the change below.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setAttachment(null)}
-                  aria-label="Remove the attached image"
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-nimbus-text-muted transition-[color,transform] duration-300 ease-[var(--nimbus-ease)] hover:text-nimbus-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nimbus-accent active:scale-90 sm:h-9 sm:w-9"
-                >
-                  <X aria-hidden className="h-4 w-4" />
-                </button>
-              </div>
-            )}
-            {attachment && !input.trim() && (
-              <div className="flex flex-wrap gap-2">
-                {IMAGE_EDIT_IDEAS.map((idea) => (
-                  <button
-                    key={idea}
-                    type="button"
-                    onClick={() => {
-                      setInput(idea);
-                      inputRef.current?.focus();
-                    }}
-                    className="min-h-11 rounded-[var(--nimbus-radius-pill)] border border-nimbus-border bg-nimbus-surface px-3.5 text-xs font-medium text-nimbus-text-muted transition-[color,transform,border-color] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-accent/40 hover:text-nimbus-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nimbus-accent active:scale-95 sm:min-h-9"
-                  >
-                    {idea}
-                  </button>
-                ))}
-              </div>
-            )}
-            {attachError && (
-              <p role="alert" className="px-1 text-xs text-nimbus-text">
-                {attachError}
-              </p>
-            )}
-          </div>
-        )}
-
-        <div className="nimbus-shell shadow-[var(--nimbus-shadow)]">
-          <form
-            onSubmit={handleSubmit}
-            onDragOver={(e) => {
-              if (!canEditImages) return;
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => {
-              if (!canEditImages) return;
-              e.preventDefault();
-              setDragging(false);
-              void attachFile(e.dataTransfer.files[0]);
-            }}
-            className={`nimbus-shell-inner nimbus-glass flex flex-col gap-2 border bg-nimbus-surface/90 p-2 sm:flex-row sm:items-center ${
-              dragging ? "border-nimbus-accent" : "border-nimbus-border"
-            }`}
-          >
-            <div className="flex items-center gap-2 overflow-x-auto sm:overflow-visible">
-              <ModelSwitcher value={model} onChange={onModelChange} />
-              <RepoConnect
-                value={githubRepo}
-                onChange={onRepoChange}
-                pushStatus={pushStatus}
-                forceOpen={repoPromptOpen}
-                onForceOpenHandled={() => setRepoPromptOpen(false)}
-              />
-              <div className="relative shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setMcpOpen((v) => !v)}
-                  className="flex items-center gap-1 rounded-[var(--nimbus-radius-pill)] border border-nimbus-border bg-nimbus-surface px-3 py-2 text-xs font-medium text-nimbus-text-muted shadow-[var(--nimbus-shadow)] transition-[transform,border-color] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-accent/40 active:scale-[0.96]"
-                >
-                  MCP
-                  {enabledConnectors.filter((c) => c.enabled).length > 0 && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-nimbus-free" />
-                  )}
-                </button>
-                <McpConnectors
-                  open={mcpOpen}
-                  onOpenChange={setMcpOpen}
-                  onConnectorsChange={setEnabledConnectors}
-                />
-              </div>
             </div>
-            <div className="flex flex-1 items-center gap-2">
-              {canEditImages && (
-                <>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept={ACCEPTED_IMAGE_TYPES.join(",")}
-                    className="sr-only"
-                    tabIndex={-1}
-                    aria-hidden
-                    onChange={(e) => {
-                      void attachFile(e.target.files?.[0]);
-                      e.target.value = "";
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isStreaming || preparing}
-                    aria-label="Attach an image to edit"
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-nimbus-border bg-nimbus-surface text-nimbus-text-muted transition-[color,transform,border-color] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-accent/40 hover:text-nimbus-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nimbus-accent active:scale-90 disabled:cursor-not-allowed disabled:opacity-40 sm:h-10 sm:w-10"
-                  >
-                    <ImagePlus aria-hidden className="h-[18px] w-[18px]" />
-                  </button>
-                </>
-              )}
-              <input
-                ref={inputRef}
-                className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm text-nimbus-text placeholder:text-nimbus-text-muted focus:outline-none disabled:opacity-50"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onPaste={(e) => {
-                  if (!canEditImages) return;
-                  const file = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
-                  if (file) {
-                    e.preventDefault();
-                    void attachFile(file);
-                  }
-                }}
-                placeholder={attachment ? "Describe the change" : "Ask something…"}
-                disabled={isStreaming}
-              />
-              <button
-                type="submit"
-                disabled={isStreaming || preparing || !input.trim()}
-                onPointerEnter={handleSendPointerEnter}
-                onPointerLeave={handleSendPointerLeave}
-                aria-label="Send message"
-                className="group/send flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-nimbus-accent text-white shadow-[var(--nimbus-glow)] transition-[opacity,box-shadow,transform] duration-300 ease-[var(--nimbus-ease)] hover:opacity-90 active:scale-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
-              >
-                <span ref={sendIconRef} className="flex h-6 w-6 items-center justify-center rounded-full bg-white/15">
-                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-                    <path
-                      d="M7 11.5V2.5M7 2.5 3 6.5M7 2.5l4 4"
-                      stroke="currentColor"
-                      strokeWidth="1.6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </span>
-              </button>
+          )}
+
+          {attachError && (
+            <p role="alert" className="px-1 text-[12.5px] text-nimbus-danger">
+              {attachError}
+            </p>
+          )}
+
+          {attachment && !input.trim() && (
+            <div className="flex flex-wrap gap-1.5">
+              {IMAGE_EDIT_IDEAS.map((idea) => (
+                <button
+                  key={idea}
+                  type="button"
+                  onClick={() => {
+                    setInput(idea);
+                    textareaRef.current?.focus();
+                  }}
+                  className={CHIP}
+                >
+                  {idea}
+                </button>
+              ))}
             </div>
-          </form>
+          )}
+
+          <Composer
+            ref={composerRef}
+            value={input}
+            onValueChange={setInput}
+            onSubmit={submit}
+            onStop={() => void stop()}
+            streaming={isStreaming}
+            canSend={Boolean(input.trim()) && !preparing && !isStreaming}
+            placeholder={placeholder}
+            textareaRef={textareaRef}
+            fileInputRef={fileInputRef}
+            controls={controls}
+            attachment={attachment}
+            preparing={preparing}
+            canAttach={Boolean(canEditImages)}
+            onAttachFile={(file) => void attachFile(file)}
+            onRemoveAttachment={() => setAttachment(null)}
+            dragging={dragging}
+          />
+
+          {!isEmpty && (
+            <p className="text-center text-[11.5px] text-nimbus-text-faint">
+              ARO can make mistakes. Read code before you push it.
+            </p>
+          )}
         </div>
       </div>
+
+      {isEmpty && (
+        <div className="flex flex-1 flex-col pb-6 pt-6">
+          <WelcomeSuggestions
+            suggestions={suggestionsFor(githubRepo)}
+            onPick={(prompt) => trySend(prompt)}
+            canEditImages={Boolean(canEditImages)}
+            onPickImage={() => fileInputRef.current?.click()}
+            lastConversation={lastConversation}
+            onContinue={onSelectConversation}
+          />
+        </div>
+      )}
+
+      {dragging && (
+        <div className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-[14px] border-2 border-dashed border-nimbus-accent/70 bg-nimbus-panel/85 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <ImagePlus aria-hidden className="h-6 w-6 text-nimbus-accent-text" />
+            <p className="text-[14px] font-medium text-nimbus-text">Drop an image to edit it</p>
+            <p className="text-[12.5px] text-nimbus-text-muted">PNG, JPEG, or WebP</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

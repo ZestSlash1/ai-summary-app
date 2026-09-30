@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import type { ModelSource } from "@/lib/storage";
-import { loadModelSource, saveModelSource } from "@/lib/storage";
+import { MODEL_SOURCE_EVENT, loadModelSource, saveModelSource } from "@/lib/storage";
+import { useHomeGpu } from "@/lib/useHomeGpu";
 import { BonsaiStateLine } from "@/components/GpuStatus";
+import { Segmented } from "@/components/ui/Segmented";
 
 const OPTIONS: { value: ModelSource; label: string }[] = [
   { value: "gateway", label: "AI Gateway" },
@@ -13,36 +15,23 @@ const OPTIONS: { value: ModelSource; label: string }[] = [
 
 export function ModelSourceToggle() {
   const [source, setSource] = useState<ModelSource>("gateway");
+  const { allowed } = useHomeGpu();
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSource(loadModelSource());
+    const onSource = (e: Event) => setSource((e as CustomEvent<ModelSource>).detail);
+    window.addEventListener(MODEL_SOURCE_EVENT, onSource);
+    return () => window.removeEventListener(MODEL_SOURCE_EVENT, onSource);
   }, []);
 
-  function select(value: ModelSource) {
-    setSource(value);
-    saveModelSource(value);
-  }
+  // Bonsai runs on the owner's PC: accounts that cannot use it do not see it.
+  const options = allowed === false ? OPTIONS.filter((o) => o.value !== "bonsai") : OPTIONS;
 
   return (
-    <div className="flex flex-col items-start gap-2.5">
-    <div className="inline-flex rounded-[var(--nimbus-radius-pill)] border border-nimbus-border bg-nimbus-bg p-1">
-      {OPTIONS.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => select(opt.value)}
-          className={`rounded-[var(--nimbus-radius-pill)] px-3.5 py-1.5 text-sm font-medium transition-colors ${
-            source === opt.value
-              ? "bg-nimbus-surface text-nimbus-text shadow-[var(--nimbus-shadow)]"
-              : "text-nimbus-text-muted hover:text-nimbus-text"
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-    <BonsaiStateLine active={source === "bonsai"} />
+    <div className="flex flex-col items-start gap-3">
+      <Segmented label="Model source" value={source} options={options} onChange={saveModelSource} />
+      <BonsaiStateLine active={source === "bonsai"} />
     </div>
   );
 }

@@ -1,58 +1,49 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Monitor, Moon, Sun } from "lucide-react";
 import type { Theme } from "@/lib/theme";
-import { loadTheme, saveTheme } from "@/lib/theme";
+import { THEME_EVENT, loadTheme, saveTheme } from "@/lib/theme";
+import { gsap, reducedMotion } from "@/lib/motion";
 
-const ORDER: Theme[] = ["light", "dark", "system"];
+const ORDER: Theme[] = ["dark", "light", "system"];
+const ICON = { dark: Moon, light: Sun, system: Monitor };
+const NAME = { dark: "Dark", light: "Light", system: "Match system" };
 
+/** Cycles dark, light, system. The icon turns over as it changes. */
 export function ThemeToggleIcon({ className = "" }: { className?: string }) {
-  const [theme, setTheme] = useState<Theme>("system");
+  const [theme, setTheme] = useState<Theme>("dark");
+  const iconRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTheme(loadTheme());
+    const onTheme = (e: Event) => setTheme((e as CustomEvent<Theme>).detail);
+    window.addEventListener(THEME_EVENT, onTheme);
+    return () => window.removeEventListener(THEME_EVENT, onTheme);
   }, []);
 
   function cycle() {
     const next = ORDER[(ORDER.indexOf(theme) + 1) % ORDER.length];
     setTheme(next);
     saveTheme(next);
+    if (iconRef.current && !reducedMotion()) {
+      gsap.fromTo(iconRef.current, { rotate: -90, scale: 0.6, autoAlpha: 0 }, { rotate: 0, scale: 1, autoAlpha: 1, duration: 0.5, ease: "back.out(2)" });
+    }
   }
 
+  const Icon = ICON[theme];
   return (
     <button
       type="button"
       onClick={cycle}
-      aria-label={`Theme: ${theme}. Click to change.`}
-      title={`Theme: ${theme}`}
-      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-nimbus-border bg-nimbus-surface text-nimbus-text-muted shadow-[var(--nimbus-shadow)] transition-colors hover:text-nimbus-text ${className}`}
+      aria-label={`Theme: ${NAME[theme]}. Change theme`}
+      title={`Theme: ${NAME[theme]}`}
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-nimbus-text-muted transition-colors hover:bg-nimbus-surface-2 hover:text-nimbus-text ${className}`}
     >
-      {theme === "light" && (
-        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-          <circle cx="7.5" cy="7.5" r="3" stroke="currentColor" strokeWidth="1.3" />
-          <path
-            d="M7.5 0.8v1.7M7.5 12.5v1.7M14.2 7.5h-1.7M2.5 7.5H0.8M12.3 2.7l-1.2 1.2M3.9 11.1l-1.2 1.2M12.3 12.3l-1.2-1.2M3.9 3.9 2.7 2.7"
-            stroke="currentColor"
-            strokeWidth="1.3"
-            strokeLinecap="round"
-          />
-        </svg>
-      )}
-      {theme === "dark" && (
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <path
-            d="M12.5 8.2A5.7 5.7 0 0 1 5.8 1.5a5.7 5.7 0 1 0 6.7 6.7Z"
-            fill="currentColor"
-          />
-        </svg>
-      )}
-      {theme === "system" && (
-        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-          <rect x="1" y="2.5" width="13" height="8" rx="1.3" stroke="currentColor" strokeWidth="1.3" />
-          <path d="M5 12.5h5M7.5 10.5v2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-        </svg>
-      )}
+      <span ref={iconRef} className="flex">
+        <Icon aria-hidden className="h-4 w-4" />
+      </span>
     </button>
   );
 }

@@ -1,28 +1,44 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ThinkingState } from "@/components/aicss/ThinkingState";
 
-export function ThinkingIndicator() {
-  const [seconds, setSeconds] = useState(0);
+/**
+ * "Thinking" with a live second counter, counted from `since` (when the turn began) so the
+ * timer carries on when the placeholder row hands over to the reply. On Bonsai, a long wait
+ * usually means the home model is loading after a nap, so say that instead of leaving it unexplained.
+ */
+export function ThinkingIndicator({
+  label = "Thinking",
+  bonsai = false,
+  since,
+}: {
+  label?: string;
+  bonsai?: boolean;
+  since?: number;
+}) {
+  const [start] = useState(() => since || Date.now());
+  const [now, setNow] = useState(start);
 
   useEffect(() => {
-    const start = Date.now();
-    const id = window.setInterval(() => {
-      setSeconds(Math.floor((Date.now() - start) / 1000));
-    }, 1000);
+    const tick = () => setNow(Date.now());
+    tick();
+    const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
   }, []);
 
+  const seconds = Math.max(0, Math.floor((now - start) / 1000));
+
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex items-center gap-2 self-start px-1 py-1 text-sm"
-    >
-      <span className="nimbus-tick-dot h-1.5 w-1.5 shrink-0 rounded-full bg-nimbus-accent" />
-      <ThinkingState />
-      <span className="text-nimbus-text-muted">for {seconds}s…</span>
+    <div role="status" aria-live="polite" className="flex flex-col gap-0.5 py-1 text-[13.5px]">
+      <p className="flex items-center gap-2">
+        <span className="aro-shimmer font-medium">{label}</span>
+        <span className="tabular-nums text-nimbus-text-faint">{seconds}s</span>
+      </p>
+      {bonsai && seconds >= 8 && (
+        <p className="text-[12.5px] text-nimbus-text-muted">
+          Bonsai is probably waking up on the home PC. The first reply after a break takes about 15 seconds.
+        </p>
+      )}
     </div>
   );
 }

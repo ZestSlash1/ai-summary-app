@@ -3,24 +3,38 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
+import { ArrowLeft, Check, Trash2, X } from "lucide-react";
+import { gsap, useGSAP, reducedMotion } from "@/lib/motion";
 import { ModelSwitcher } from "@/components/ModelSwitcher";
 import { ModelSourceToggle } from "@/components/ModelSourceToggle";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { GpuStatusPanel } from "@/components/GpuStatus";
 import { McpConnectorsList } from "@/components/McpConnectorsList";
+import { BrandTile, GithubMark } from "@/components/BrandMark";
+import { useToast } from "@/components/Toaster";
+import { BUTTON_PRIMARY, BUTTON_SECONDARY } from "@/components/ui/classes";
 import { FALLBACK_MODEL } from "@/lib/types";
-import { loadDefaultModel, saveDefaultModel, saveConversations } from "@/lib/storage";
-import type { Skill } from "@/lib/skills";
+import { loadDefaultModel, saveDefaultModel, saveConversations, saveOpenTabs } from "@/lib/storage";
+import { BUILTIN_SKILLS, type Skill } from "@/lib/skills";
 
-gsap.registerPlugin(useGSAP);
+const SECTIONS = [
+  { id: "account", label: "Account" },
+  { id: "appearance", label: "Appearance" },
+  { id: "models", label: "Models" },
+  { id: "home-pc", label: "Home PC" },
+  { id: "connectors", label: "Connectors" },
+  { id: "skills", label: "Skills" },
+  { id: "data", label: "Data" },
+];
 
 export default function SettingsPage() {
   const { data: session, status } = useSession();
+  const toast = useToast();
   const [defaultModel, setDefaultModel] = useState(FALLBACK_MODEL);
-  const [cleared, setCleared] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [approvedSkills, setApprovedSkills] = useState<Skill[]>([]);
   const [proposedSkills, setProposedSkills] = useState<Skill[]>([]);
+  const [activeSection, setActiveSection] = useState(SECTIONS[0].id);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,24 +48,45 @@ export default function SettingsPage() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!data) return;
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setApprovedSkills(data.approved ?? []);
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setProposedSkills(data.proposed ?? []);
       })
       .catch(() => {});
   }, [session?.user]);
 
-  async function reviewSkill(id: string, status: "approved" | "rejected") {
+  // Scroll spy: the nav follows whichever section is in the reading zone.
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setActiveSection(visible[0].target.id);
+      },
+      { rootMargin: "-20% 0px -60% 0px" }
+    );
+    for (const s of SECTIONS) {
+      const el = document.getElementById(s.id);
+      if (el) observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, []);
+
+  useGSAP(
+    () => {
+      if (reducedMotion()) return;
+      gsap.from("[data-settings-section]", { autoAlpha: 0, y: 14, duration: 0.6, stagger: 0.05, ease: "aro" });
+      gsap.from("[data-settings-nav] > *", { autoAlpha: 0, x: -6, duration: 0.45, stagger: 0.03, ease: "aro" });
+    },
+    { scope: containerRef }
+  );
+
+  async function reviewSkill(id: string, next: "approved" | "rejected") {
     const skill = proposedSkills.find((s) => s.id === id);
     setProposedSkills((prev) => prev.filter((s) => s.id !== id));
-    if (status === "approved" && skill) {
-      setApprovedSkills((prev) => [...prev, skill]);
-    }
+    if (next === "approved" && skill) setApprovedSkills((prev) => [...prev, skill]);
     await fetch("/api/skills", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
+      body: JSON.stringify({ id, status: next }),
     });
   }
 
@@ -64,249 +99,267 @@ export default function SettingsPage() {
     });
   }
 
-  useGSAP(
-    () => {
-      const sections = containerRef.current?.querySelectorAll("section");
-      if (!sections?.length) return;
-      gsap.fromTo(
-        sections,
-        { opacity: 0, y: 16, filter: "blur(3px)" },
-        {
-          opacity: 1,
-          y: 0,
-          filter: "blur(0px)",
-          duration: 0.6,
-          ease: "power3.out",
-          stagger: 0.06,
-        }
-      );
-    },
-    { scope: containerRef }
-  );
-
   function handleDefaultModelChange(model: string) {
     setDefaultModel(model);
     saveDefaultModel(model);
   }
 
   function handleClearData() {
-    if (!confirm("Delete all local conversations? This can't be undone.")) return;
+    if (!confirmClear) {
+      setConfirmClear(true);
+      return;
+    }
     saveConversations([]);
+    saveOpenTabs([]);
     window.localStorage.removeItem("nimbus-active-conversation");
-    setCleared(true);
+    setConfirmClear(false);
+    toast({ tone: "info", title: "Local chats cleared", description: "Chats saved to your account are not affected." });
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-8 px-6 py-10"
-    >
-      <div className="flex items-center gap-3">
+    <div ref={containerRef} className="min-h-dvh w-full bg-nimbus-chrome">
+      <header className="nimbus-glass sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-nimbus-border bg-nimbus-chrome/80 px-4 md:px-8">
         <Link
           href="/"
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-nimbus-border bg-nimbus-surface text-nimbus-text-muted shadow-[var(--nimbus-shadow)] transition-[transform,color] duration-300 ease-[var(--nimbus-ease)] hover:-translate-x-0.5 hover:text-nimbus-text active:scale-90"
+          aria-label="Back to chats"
+          className="group/back flex h-8 items-center gap-1.5 rounded-lg px-2 text-[13px] text-nimbus-text-muted transition-colors hover:bg-nimbus-surface-2 hover:text-nimbus-text"
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path
-              d="M10 3 5 8l5 5"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <ArrowLeft aria-hidden className="h-4 w-4 transition-transform duration-300 group-hover/back:-translate-x-0.5" />
+          Chats
         </Link>
-        <h1 className="text-xl font-semibold text-nimbus-text">Settings</h1>
-      </div>
+        <span aria-hidden className="h-4 w-px bg-nimbus-border" />
+        <BrandTile className="h-6 w-6" />
+        <h1 className="text-[15px] font-medium text-nimbus-text">Settings</h1>
+      </header>
 
-      <Section title="Account">
-        {status === "loading" ? null : session?.user ? (
-          <Card className="flex items-center gap-3">
-            {session.user.image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={session.user.image} alt="" className="h-11 w-11 rounded-full" />
-            ) : (
-              <div className="h-11 w-11 rounded-full bg-nimbus-accent-soft" />
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-nimbus-text">
-                {session.user.name ?? "Signed in"}
-              </p>
-              <p className="truncate text-xs text-nimbus-text-muted">{session.user.email}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => signOut()}
-              className="shrink-0 rounded-[var(--nimbus-radius-pill)] border border-nimbus-border px-3 py-1.5 text-xs font-medium text-nimbus-text-muted transition-[color,transform] duration-300 ease-[var(--nimbus-ease)] hover:text-nimbus-text active:scale-95"
+      <div className="mx-auto flex w-full max-w-5xl gap-12 px-4 pb-24 pt-8 md:px-8 md:pt-12">
+        <nav data-settings-nav aria-label="Settings sections" className="sticky top-24 hidden h-fit w-44 shrink-0 flex-col gap-0.5 md:flex">
+          {SECTIONS.map((s) => (
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              aria-current={activeSection === s.id ? "true" : undefined}
+              className={`rounded-lg px-3 py-1.5 text-[13.5px] transition-colors duration-200 ${
+                activeSection === s.id
+                  ? "bg-nimbus-surface-2 text-nimbus-text"
+                  : "text-nimbus-text-muted hover:bg-nimbus-surface hover:text-nimbus-text"
+              }`}
             >
-              Sign out
-            </button>
-          </Card>
-        ) : (
-          <Card className="flex items-center justify-between gap-3">
-            <p className="text-sm text-nimbus-text-muted">
-              Sign in with GitHub to push code and connect repos.
-            </p>
-            <button
-              type="button"
-              onClick={() => signIn("github")}
-              className="shrink-0 rounded-[var(--nimbus-radius-pill)] bg-nimbus-accent px-4 py-2 text-sm font-medium text-white shadow-[var(--nimbus-glow)] transition-[opacity,transform] duration-300 ease-[var(--nimbus-ease)] hover:opacity-90 active:scale-95"
-            >
-              Sign in with GitHub
-            </button>
-          </Card>
-        )}
-      </Section>
+              {s.label}
+            </a>
+          ))}
+        </nav>
 
-      <Section title="Appearance">
-        <Card>
-          <p className="text-sm text-nimbus-text-muted">
-            Dark mode is taking a break while we redesign it — it&apos;ll be back.
-          </p>
-        </Card>
-      </Section>
-
-      <Section
-        title="Model source"
-        description="Where chat models come from — applies to every message app-wide."
-      >
-        <ModelSourceToggle />
-      </Section>
-
-      <Section
-        title="Home PC"
-        description="Bonsai and image editing run on the owner's PC through a private tunnel."
-      >
-        <Card>
-          <GpuStatusPanel />
-        </Card>
-      </Section>
-
-      <Section title="Default model" description="Used for every new conversation.">
-        <ModelSwitcher value={defaultModel} onChange={handleDefaultModelChange} />
-      </Section>
-
-      <Section title="MCP connectors" description="Remote tool servers available to the assistant.">
-        <Card>
-          <McpConnectorsList />
-        </Card>
-      </Section>
-
-      {session?.user && (approvedSkills.length > 0 || proposedSkills.length > 0) && (
-        <Section
-          title="Learned skills"
-          description="Proposed automatically when a pattern shows up in what you ask for."
-        >
-          <Card className="flex flex-col gap-2">
-            {proposedSkills.length === 0 && approvedSkills.length === 0 && (
-              <p className="text-sm text-nimbus-text-muted">None yet.</p>
-            )}
-            {proposedSkills.map((skill) => (
-              <div
-                key={skill.id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-nimbus-accent/30 px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm text-nimbus-text">
-                    {skill.name}{" "}
-                    <span className="text-xs text-nimbus-text-muted">(proposed)</span>
-                  </p>
-                  <p className="truncate text-xs text-nimbus-text-muted">
-                    {skill.description}
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => reviewSkill(skill.id, "approved")}
-                    className="rounded-lg bg-nimbus-accent px-2.5 py-1 text-xs font-medium text-white"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => reviewSkill(skill.id, "rejected")}
-                    className="rounded-lg border border-nimbus-border px-2.5 py-1 text-xs text-nimbus-text-muted"
-                  >
-                    Reject
+        <div className="flex min-w-0 max-w-2xl flex-1 flex-col gap-12">
+          <Section id="account" title="Account" description="Sign in with GitHub to connect repos, push code, and sync chats.">
+            <Card>
+              {status === "loading" ? (
+                <div className="h-11 animate-pulse rounded-lg bg-nimbus-surface-2" />
+              ) : session?.user ? (
+                <div className="flex items-center gap-3">
+                  {session.user.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={session.user.image} alt="" className="h-10 w-10 rounded-full border border-nimbus-border" />
+                  ) : (
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-nimbus-surface-2">
+                      <GithubMark className="h-4 w-4" />
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] text-nimbus-text">{session.user.name ?? "Signed in"}</p>
+                    <p className="truncate text-[12.5px] text-nimbus-text-muted">{session.user.email}</p>
+                  </div>
+                  <button type="button" onClick={() => signOut()} className={BUTTON_SECONDARY}>
+                    Sign out
                   </button>
                 </div>
-              </div>
-            ))}
-            {approvedSkills.map((skill) => (
-              <div
-                key={skill.id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-nimbus-border px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm text-nimbus-text">{skill.name}</p>
-                  <p className="truncate text-xs text-nimbus-text-muted">
-                    {skill.description}
-                  </p>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-[13.5px] text-nimbus-text-muted">You are not signed in. Chats stay in this browser.</p>
+                  <button type="button" onClick={() => signIn("github")} className={BUTTON_PRIMARY}>
+                    <GithubMark className="h-4 w-4" />
+                    Sign in with GitHub
+                  </button>
                 </div>
+              )}
+            </Card>
+          </Section>
+
+          <Section id="appearance" title="Appearance" description="Dark is the default. System follows your device.">
+            <ThemeToggle />
+          </Section>
+
+          <Section id="models" title="Models" description="Where models come from applies to every chat. The default model starts each new chat.">
+            <Card className="flex flex-col gap-5">
+              <Field label="Source">
+                <ModelSourceToggle />
+              </Field>
+              <Field label="Default model">
+                <ModelSwitcher value={defaultModel} onChange={handleDefaultModelChange} placement="down" variant="field" />
+              </Field>
+            </Card>
+          </Section>
+
+          <Section id="home-pc" title="Home PC" description="Bonsai and image editing run on the owner's PC through a private tunnel.">
+            <GpuStatusPanel />
+          </Section>
+
+          <Section id="connectors" title="MCP connectors" description="Remote tool servers the model can call. Toggle them per browser.">
+            <Card>
+              <McpConnectorsList />
+            </Card>
+          </Section>
+
+          <Section id="skills" title="Skills" description="ARO proposes a skill when it notices you asking for the same thing more than once.">
+            <Card className="flex flex-col gap-2">
+              {BUILTIN_SKILLS.map((skill) => (
+                <SkillRow key={skill.id} name={skill.name} description={skill.description} tag="Built in" />
+              ))}
+              {approvedSkills.map((skill) => (
+                <SkillRow
+                  key={skill.id}
+                  name={skill.name}
+                  description={skill.description}
+                  tag="Learned"
+                  actions={
+                    <button
+                      type="button"
+                      onClick={() => deleteSkill(skill.id)}
+                      aria-label={`Delete ${skill.name}`}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-nimbus-text-faint transition-colors hover:bg-nimbus-danger-soft hover:text-nimbus-danger"
+                    >
+                      <Trash2 aria-hidden className="h-3.5 w-3.5" />
+                    </button>
+                  }
+                />
+              ))}
+              {proposedSkills.map((skill) => (
+                <SkillRow
+                  key={skill.id}
+                  name={skill.name}
+                  description={skill.description}
+                  tag="Proposed"
+                  dashed
+                  actions={
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => reviewSkill(skill.id, "approved")}
+                        aria-label={`Approve ${skill.name}`}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg bg-nimbus-accent text-white transition-transform active:scale-95"
+                      >
+                        <Check aria-hidden className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => reviewSkill(skill.id, "rejected")}
+                        aria-label={`Reject ${skill.name}`}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-nimbus-text-muted transition-colors hover:bg-nimbus-surface-2 hover:text-nimbus-text"
+                      >
+                        <X aria-hidden className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  }
+                />
+              ))}
+              {!session?.user && (
+                <p className="px-1 pt-1 text-[12.5px] text-nimbus-text-muted">Sign in to see skills learned from your chats.</p>
+              )}
+            </Card>
+          </Section>
+
+          <Section id="data" title="Data" description="Chats in this browser. Chats saved to your account are kept.">
+            <Card className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[13.5px] text-nimbus-text-muted">Delete every chat stored in this browser.</p>
+              <div className="flex items-center gap-2">
+                {confirmClear && (
+                  <button type="button" onClick={() => setConfirmClear(false)} className={BUTTON_SECONDARY}>
+                    Keep them
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => deleteSkill(skill.id)}
-                  className="shrink-0 text-xs text-nimbus-text-muted transition-colors duration-300 ease-[var(--nimbus-ease)] hover:text-nimbus-text"
+                  onClick={handleClearData}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-nimbus-danger/30 px-3.5 text-[13px] font-medium text-nimbus-danger transition-[background-color,transform] duration-200 hover:bg-nimbus-danger-soft active:scale-[0.97]"
                 >
-                  Delete
+                  <Trash2 aria-hidden className="h-3.5 w-3.5" />
+                  {confirmClear ? "Delete for good" : "Clear local chats"}
                 </button>
               </div>
-            ))}
-          </Card>
-        </Section>
-      )}
-
-      <Section title="Data">
-        <Card className="flex items-center justify-between gap-3">
-          <p className="text-sm text-nimbus-text-muted">
-            {cleared
-              ? "All local conversations cleared."
-              : "Delete every saved conversation from this browser."}
-          </p>
-          <button
-            type="button"
-            onClick={handleClearData}
-            className="shrink-0 rounded-[var(--nimbus-radius-pill)] border border-red-500/30 px-4 py-2 text-sm font-medium text-red-500 transition-[background-color,transform] duration-300 ease-[var(--nimbus-ease)] hover:bg-red-500/10 active:scale-95"
-          >
-            Clear all chats
-          </button>
-        </Card>
-      </Section>
-    </div>
-  );
-}
-
-function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return (
-    <div className="nimbus-shell shadow-[var(--nimbus-shadow)]">
-      <div className={`nimbus-shell-inner border border-nimbus-border bg-nimbus-surface p-4 ${className}`}>
-        {children}
+            </Card>
+          </Section>
+        </div>
       </div>
     </div>
   );
 }
 
 function Section({
+  id,
   title,
   description,
   children,
 }: {
+  id: string;
   title: string;
   description?: string;
   children: ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-2.5">
-      <div>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-nimbus-text-muted">
-          {title}
-        </h2>
-        {description && (
-          <p className="mt-0.5 text-sm text-nimbus-text-muted">{description}</p>
-        )}
-      </div>
-      {children}
+    <section id={id} data-settings-section className="scroll-mt-24">
+      <h2 className="text-[16px] font-medium tracking-[-0.01em] text-nimbus-text">{title}</h2>
+      {description && <p className="mt-1 text-[13.5px] leading-relaxed text-nimbus-text-muted">{description}</p>}
+      <div className="mt-4">{children}</div>
     </section>
+  );
+}
+
+function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <div
+      className={`rounded-[14px] border border-nimbus-border bg-nimbus-panel p-4 shadow-[var(--nimbus-inset-highlight)] ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-[12.5px] text-nimbus-text-muted">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function SkillRow({
+  name,
+  description,
+  tag,
+  actions,
+  dashed = false,
+}: {
+  name: string;
+  description: string;
+  tag: string;
+  actions?: ReactNode;
+  dashed?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-3 rounded-[10px] border px-3.5 py-2.5 ${
+        dashed ? "border-dashed border-nimbus-accent/35" : "border-nimbus-border"
+      }`}
+    >
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-2 text-[13.5px] text-nimbus-text">
+          <span className="truncate">{name}</span>
+          <span className="shrink-0 rounded-[5px] bg-nimbus-surface-2 px-1.5 py-px text-[11px] text-nimbus-text-muted">{tag}</span>
+        </p>
+        <p className="mt-0.5 text-[12.5px] leading-relaxed text-nimbus-text-muted">{description}</p>
+      </div>
+      {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
+    </div>
   );
 }

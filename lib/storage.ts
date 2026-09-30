@@ -69,9 +69,54 @@ export function loadModelSource(): ModelSource {
   return "gateway";
 }
 
+/** Fired on window when the source changes, so every open model picker can follow. */
+export const MODEL_SOURCE_EVENT = "aro:model-source";
+
 export function saveModelSource(source: ModelSource) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(MODEL_SOURCE_KEY, source);
+  window.dispatchEvent(new CustomEvent(MODEL_SOURCE_EVENT, { detail: source }));
+}
+
+const OPEN_TABS_KEY = "aro-open-tabs";
+const SIDEBAR_COLLAPSED_KEY = "aro-sidebar-collapsed";
+
+/** Conversation ids open as tabs, in order. Per browser, like a window layout. */
+export function loadOpenTabs(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(OPEN_TABS_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveOpenTabs(ids: string[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(OPEN_TABS_KEY, JSON.stringify(ids));
+  } catch {
+    // Not critical: tabs just reopen fresh next time.
+  }
+}
+
+export function loadSidebarCollapsed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveSidebarCollapsed(collapsed: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+  } catch {
+    // Not critical.
+  }
 }
 
 export function titleFromMessage(text: string): string {
