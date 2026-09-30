@@ -24,6 +24,9 @@ import { createRepoTools, repoSystemPrompt } from '@/lib/repoTools';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isPublicHttpUrl } from '@/lib/safeUrl';
 import { hermesChatResponse } from '@/lib/hermesChat';
+import { pruneOldTurns } from '@/lib/historyPruning';
+import { estimateConversationTokens, getModelContextLimit } from '@/lib/tokenEstimate';
+import { parseModelRef, toModelRef } from '@/lib/modelRef';
 
 // Bonsai answers at about 33 tokens a second and a repo question takes several tool steps,
 // so give a turn the full five minutes Vercel allows on every plan (Fluid compute).
@@ -57,7 +60,7 @@ When you write code that belongs in a project file (not a throwaway snippet), ta
 ...
 \`\`\`
 
-Only add a path when the code is meant to be saved as a real file in the user's project — short illustrative snippets don't need one. Use tools when they give a more accurate answer than reasoning alone. Only mention capabilities you actually have.`;
+Only add a path when the code is meant to be saved as a real file in the user's project -- short illustrative snippets don't need one. Use tools when they give a more accurate answer than reasoning alone. Only mention capabilities you actually have.`;
 
 type McpConnectorInput = { url: string; authHeader?: string };
 type GithubRepoInput = { owner: string; name: string; branch: string };
@@ -282,12 +285,12 @@ export async function POST(request: Request) {
     try {
       const { approved } = await getUserSkills(userId);
       if (approved.length > 0) {
-        systemPrompt += `\n\nThis user has approved these learned skills — use them when relevant:\n${approved
+        systemPrompt += `\n\nThis user has approved these learned skills (use them when relevant):\n${approved
           .map((s) => `- ${s.name}: ${s.description}`)
           .join('\n')}`;
       }
       if (lastUserText.trim() && !messageMatchesKnownSkill(lastUserText, approved)) {
-        // Scheduled for after the response is sent — this must never add
+        // Scheduled for after the response is sent -- this must never add
         // latency to the user-visible reply.
         after(() => logSignalAndMaybePropose(userId, lastUserText));
       }
@@ -296,7 +299,7 @@ export async function POST(request: Request) {
     }
   }
 
-  // This only fires when the client sent no model at all — every normal
+  // This only fires when the client sent no model at all -- every normal
   // new-conversation path resolves a real one up front. Kept as a genuine
   // last resort: pick whatever's actually free in the live catalog instead
   // of a hardcoded id that can silently rot.
@@ -318,10 +321,25 @@ export async function POST(request: Request) {
     }
   }
 
+  const resolvedModelId = model || (await resolveDefaultModel());
+  const parsedRef = parseModelRef(resolvedModelId, modelSource || 'gateway');
+  const qualifiedModelRef = toModelRef(parsedRef.source, parsedRef.id);
+  const contextLimit = getModelContextLimit(qualifiedModelRef);
+
+  let processedMessages = compactHistory(messages);
+  if (estimateConversationTokens(processedMessages) > contextLimit * 0.9) {
+    processedMessages = pruneOldTurns(processedMessages, 2);
+    while (estimateConversationTokens(processedMessages) > contextLimit * 0.9 && processedMessages.length > 2) {
+      const next = pruneOldTurns(processedMessages, 2);
+      if (next.length >= processedMessages.length) break;
+      processedMessages = next;
+    }
+  }
+
   const result = streamText({
-    model: resolveModel(model || (await resolveDefaultModel()), modelSource),
+    model: resolveModel(resolvedModelId, modelSource),
     system: systemPrompt,
-    messages: await convertToModelMessages(compactHistory(messages)),
+    messages: await convertToModelMessages(processedMessages),
     tools,
     // The edit result is shown by the UI, so end the turn there: another model step would
     // only compete with the image job for the GPU.

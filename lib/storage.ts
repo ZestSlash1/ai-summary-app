@@ -25,7 +25,7 @@ export function saveConversations(conversations: Conversation[]) {
       JSON.stringify(conversations)
     );
   } catch {
-    // localStorage may be full or unavailable (private mode) — fail silently.
+    // localStorage may be full or unavailable (private mode) -- fail silently.
   }
 }
 
@@ -39,13 +39,20 @@ export function saveActiveId(id: string) {
   window.localStorage.setItem(ACTIVE_ID_KEY, id);
 }
 
-export function createConversation(model: string): Conversation {
+export function createConversation(
+  model: string,
+  options?: Partial<Omit<Conversation, "id" | "createdAt" | "model">>
+): Conversation {
   return {
     id: crypto.randomUUID(),
-    title: "New chat",
-    messages: [],
+    title: options?.title ?? "New chat",
+    messages: options?.messages ?? [],
     model,
     createdAt: Date.now(),
+    ...(options?.githubRepo ? { githubRepo: options.githubRepo } : {}),
+    ...(options?.mode ? { mode: options.mode } : {}),
+    ...(options?.continuedFrom ? { continuedFrom: options.continuedFrom } : {}),
+    ...(options?.continuedIn ? { continuedIn: options.continuedIn } : {}),
   };
 }
 

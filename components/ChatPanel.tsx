@@ -31,7 +31,16 @@ import { CHIP } from "./ui/classes";
 import { extractPushableFiles } from "@/lib/codeBlocks";
 import type { McpConnector } from "@/lib/mcp";
 import type { Conversation, GithubRepoLink } from "@/lib/types";
-import { loadModelSource, type ModelSource } from "@/lib/storage";
+import {
+  loadModelSource,
+  loadConversations,
+  saveConversations,
+  loadOpenTabs,
+  saveOpenTabs,
+  saveActiveId,
+  titleFromMessage,
+  type ModelSource,
+} from "@/lib/storage";
 import { parseModelRef } from "@/lib/modelRef";
 import { useHomeGpu } from "@/lib/useHomeGpu";
 import { ImageError, prepareImage, type PreparedImage } from "@/lib/imageResize";
@@ -202,6 +211,8 @@ export function ChatPanel({
   signedIn,
   onSelectConversation,
   onStreamingChange,
+  continuedFrom,
+  continuedIn,
 }: {
   conversationId: string;
   active: boolean;
@@ -216,7 +227,23 @@ export function ChatPanel({
   signedIn: boolean;
   onSelectConversation: (id: string) => void;
   onStreamingChange: (conversationId: string, streaming: boolean) => void;
+  continuedFrom?: { id: string; title: string };
+  continuedIn?: { id: string; title: string };
 }) {
+  const links = useMemo(() => {
+    if (continuedFrom || continuedIn) {
+      return { continuedFrom, continuedIn };
+    }
+    if (typeof window !== "undefined") {
+      const conv = loadConversations().find((c) => c.id === conversationId);
+      return {
+        continuedFrom: conv?.continuedFrom,
+        continuedIn: conv?.continuedIn,
+      };
+    }
+    return {};
+  }, [conversationId, continuedFrom, continuedIn]);
+
   const modelRef = useRef(model);
   const repoRef = useRef(githubRepo);
   const [enabledConnectors, setEnabledConnectors] = useState<McpConnector[]>([]);
@@ -360,8 +387,158 @@ export function ChatPanel({
     }
   }
 
+  const trySendRef = useRef(trySend);
+  useEffect(() => {
+    trySendRef.current = trySend;
+  });
+
+  const [isSwitching, setIsSwitching] = useState(false);
+
+  // Pick up any pending message queued by auto-continuation
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const key = `aro-pending-prompt:${conversationId}`;
+    const pendingRaw = window.sessionStorage.getItem(key);
+    if (!pendingRaw) return;
+    window.sessionStorage.removeItem(key);
+    try {
+      const parsed = JSON.parse(pendingRaw);
+      if (parsed?.text) {
+        requestAnimationFrame(() => {
+          trySendRef.current(parsed.text, parsed.image);
+        });
+      }
+    } catch {
+      // Ignore
+    }
+  }, [conversationId]);
+
+  async function autoSwitchConversation(pendingText: string, pendingImage?: PreparedImage | null) {
+    if (sendingRef.current || isStreaming || isSwitching) return;
+    sendingRef.current = true;
+    setIsSwitching(true);
+
+    try {
+      const modelRefParsed = parseModelRef(model, loadModelSource());
+
+      // 1. Fetch handoff summary via /api/chat/summary
+      let summaryText = "";
+      try {
+        const res = await fetch("/api/chat/summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages,
+            model: modelRefParsed.id,
+            modelSource: modelRefParsed.source,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          summaryText = typeof data.summary === "string" ? data.summary : "";
+        }
+      } catch {
+        // Fall back to continuing without summary if endpoint fails
+      }
+
+      // 2. Identify current conversation info
+      const allConvs = loadConversations();
+      const currentConv = allConvs.find((c) => c.id === conversationId);
+      const currentTitle = currentConv?.title || "Previous chat";
+
+      // 3. Create new conversation with same model, repo, mode
+      const newId = crypto.randomUUID();
+      const newTitle = titleFromMessage(pendingText) || "Continued chat";
+      const summaryPrefix = `Continued from ${currentTitle}`;
+      const summaryContent = summaryText
+        ? `${summaryPrefix}\n\n${summaryText}`
+        : summaryPrefix;
+
+      const handoffMessage: UIMessage = {
+        id: crypto.randomUUID(),
+        role: "system",
+        parts: [{ type: "text", text: summaryContent }],
+      };
+
+      const newConversation: Conversation = {
+        id: newId,
+        title: newTitle,
+        messages: [handoffMessage],
+        model,
+        createdAt: Date.now(),
+        githubRepo,
+        mode: currentConv?.mode,
+        continuedFrom: { id: conversationId, title: currentTitle },
+      };
+
+      // 4. Update current conversation with continuedIn link
+      let foundCurrent = false;
+      const updatedConvs = allConvs.map((c) => {
+        if (c.id === conversationId) {
+          foundCurrent = true;
+          return {
+            ...c,
+            continuedIn: { id: newId, title: newTitle },
+          };
+        }
+        return c;
+      });
+      if (!foundCurrent) {
+        updatedConvs.push({
+          id: conversationId,
+          title: currentTitle,
+          messages,
+          model,
+          createdAt: Date.now(),
+          githubRepo,
+          continuedIn: { id: newId, title: newTitle },
+        });
+      }
+      updatedConvs.push(newConversation);
+
+      // Persist to storage
+      saveConversations(updatedConvs);
+
+      // Update open tabs and set active conversation
+      const openTabs = loadOpenTabs();
+      if (!openTabs.includes(newId)) {
+        saveOpenTabs([...openTabs, newId]);
+      }
+      saveActiveId(newId);
+
+      // Store pending prompt to be automatically sent in the new conversation
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(
+          `aro-pending-prompt:${newId}`,
+          JSON.stringify({ text: pendingText, image: pendingImage })
+        );
+      }
+
+      // Reset input state in current panel
+      setInput("");
+      setAttachment(null);
+      setAttachError(null);
+
+      // Switch to new tab
+      if (typeof window !== "undefined" && typeof window.location?.reload === "function") {
+        window.location.reload();
+      } else {
+        onSelectConversation(newId);
+      }
+    } catch {
+      sendingRef.current = false;
+      setIsSwitching(false);
+    }
+  }
+
   function submit() {
-    if (!input.trim() || preparing) return;
+    if (!input.trim() || preparing || isSwitching) return;
+    const modelRefParsed = parseModelRef(model, loadModelSource());
+    const isHermes = modelRefParsed.source === "hermes";
+    if (!isHermes && contextUsage.percent >= 80 && messages.length > 0) {
+      void autoSwitchConversation(input, attachment);
+      return;
+    }
     trySend(input, attachment);
     setInput("");
     setAttachment(null);
@@ -552,6 +729,46 @@ export function ChatPanel({
         </div>
       )}
 
+      {/* Header continuation links */}
+      {(links.continuedFrom || links.continuedIn) && (
+        <header
+          role="region"
+          aria-label="Conversation continuity links"
+          className="relative z-20 flex shrink-0 items-center justify-between border-b border-nimbus-border/50 bg-nimbus-panel/60 px-4 py-2 text-[12.5px] text-nimbus-text-muted backdrop-blur-xs sm:px-6"
+        >
+          <div className="flex min-w-0 items-center gap-1.5">
+            {links.continuedFrom && (
+              <span className="flex min-w-0 items-center gap-1">
+                <span>Continued from</span>
+                <button
+                  type="button"
+                  onClick={() => onSelectConversation(links.continuedFrom!.id)}
+                  className="truncate font-medium text-nimbus-accent-text hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-nimbus-accent"
+                  aria-label={`Continued from ${links.continuedFrom.title}`}
+                >
+                  {links.continuedFrom.title}
+                </button>
+              </span>
+            )}
+          </div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            {links.continuedIn && (
+              <span className="flex min-w-0 items-center gap-1">
+                <span>Continued in</span>
+                <button
+                  type="button"
+                  onClick={() => onSelectConversation(links.continuedIn!.id)}
+                  className="truncate font-medium text-nimbus-accent-text hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-nimbus-accent"
+                  aria-label={`Continued in ${links.continuedIn.title}`}
+                >
+                  {links.continuedIn.title}
+                </button>
+              </span>
+            )}
+          </div>
+        </header>
+      )}
+
       <div
         ref={scrollRef}
         onScroll={isEmpty ? undefined : onScroll}
@@ -566,6 +783,20 @@ export function ChatPanel({
         ) : (
           <div ref={listRef} className="mx-auto flex w-full max-w-[740px] flex-col gap-8 px-4 pb-10 pt-8 sm:px-6">
             {messages.map((message) => {
+              if (message.role === "system") {
+                const text = textOf(message);
+                return (
+                  <div
+                    key={message.id}
+                    data-message={message.id}
+                    data-role="system"
+                    className="mx-auto my-2 w-full max-w-[740px] rounded-[14px] border border-nimbus-border bg-nimbus-surface-2/60 px-4 py-3 text-[13px] leading-relaxed text-nimbus-text-muted"
+                  >
+                    <div className="whitespace-pre-wrap">{text}</div>
+                  </div>
+                );
+              }
+
               if (message.role === "user") {
                 const text = textOf(message);
                 const images = message.parts.filter(
@@ -775,13 +1006,13 @@ export function ChatPanel({
             onSubmit={submit}
             onStop={() => void stop()}
             streaming={isStreaming}
-            canSend={Boolean(input.trim()) && !preparing && !isStreaming}
+            canSend={Boolean(input.trim()) && !preparing && !isStreaming && !isSwitching}
             placeholder={placeholder}
             textareaRef={textareaRef}
             fileInputRef={fileInputRef}
             controls={controls}
             attachment={attachment}
-            preparing={preparing}
+            preparing={preparing || isSwitching}
             canAttach={Boolean(canEditImages)}
             onAttachFile={(file) => void attachFile(file)}
             onRemoveAttachment={() => setAttachment(null)}
