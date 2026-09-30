@@ -6,6 +6,7 @@ import { createGateway } from './server.mjs';
 
 const TOKEN = 'test-token-0123456789-abcdefghijkl';
 const LLAMA_KEY = 'llama-secret-value';
+const HERMES_KEY = 'hermes-api-server-key';
 
 function listen(server) {
   return new Promise((r) => server.listen(0, '127.0.0.1', () => r(server.address().port)));
@@ -43,8 +44,34 @@ async function setup(overrides = {}) {
     req.resume();
     res.end(JSON.stringify({ ok: true, url: req.url }));
   });
+  seen.hermes = [];
+  const hermesState = { up: true };
+  const hermes = http.createServer((req, res) => {
+    seen.hermes.push({
+      path: `${req.method} ${req.url}`,
+      auth: req.headers.authorization,
+      sessionId: req.headers['x-hermes-session-id'],
+      sessionKey: req.headers['x-hermes-session-key'],
+    });
+    if (!hermesState.up) {
+      res.writeHead(500);
+      return res.end();
+    }
+    if (req.url === '/v1/capabilities' || req.url === '/v1/models') {
+      res.setHeader('content-type', 'application/json');
+      return res.end(JSON.stringify({ object: 'hermes.api_server.capabilities', data: [{ id: 'hermes-agent' }] }));
+    }
+    req.resume();
+    res.writeHead(200, { 'content-type': 'text/event-stream', 'x-hermes-session-id': req.headers['x-hermes-session-id'] || '' });
+    res.write('event: hermes.tool.progress\ndata: {"tool":"terminal","toolCallId":"c1","status":"running"}\n\n');
+    setTimeout(() => {
+      res.write('data: [DONE]\n\n');
+      res.end();
+    }, 300);
+  });
   const lp = await listen(llama);
   const cp = await listen(comfy);
+  const hp = await listen(hermes);
 
   const gw = createGateway({
     host: '127.0.0.1',
@@ -53,6 +80,8 @@ async function setup(overrides = {}) {
     llama: `http://127.0.0.1:${lp}`,
     llamaKey: LLAMA_KEY,
     comfy: `http://127.0.0.1:${cp}`,
+    hermes: `http://127.0.0.1:${hp}`,
+    hermesKey: HERMES_KEY,
     gpuMode: 'sleep',
     maxBodyBytes: 1024,
     ratePerMinute: 1000,
@@ -62,14 +91,14 @@ async function setup(overrides = {}) {
     ...overrides,
   });
   const gp = await listen(gw);
-  const call = (method, path, { token = TOKEN, body } = {}) =>
+  const call = (method, path, { token = TOKEN, body, headers = {} } = {}) =>
     fetch(`http://127.0.0.1:${gp}${path}`, {
       method,
-      headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), 'content-type': 'application/json' },
+      headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), 'content-type': 'application/json', ...headers },
       body,
     });
-  const close = () => [gw, llama, comfy].forEach((s) => (s.closeAllConnections?.(), s.close()));
-  return { call, seen, llamaState, comfyState, gw, close };
+  const close = () => [gw, llama, comfy, hermes].forEach((s) => (s.closeAllConnections?.(), s.close()));
+  return { call, seen, llamaState, comfyState, hermesState, gw, close };
 }
 
 test('rejects missing and wrong tokens', async () => {
@@ -188,4 +217,79 @@ test('status reports states', async () => {
   assert.equal(s.bonsai, 'sleeping');
   assert.equal(s.comfy, 'online');
   t.close();
+});
+
+test('hermes: swaps the tunnel token for the Hermes key and passes session headers', async () => {
+  const t = await setup();
+  const r = await t.call('POST', '/hermes/v1/chat/completions', {
+    body: '{"messages":[{"role":"user","content":"hi"}],"stream":true}',
+    headers: { 'x-hermes-session-id': 'aro-chat-1', 'x-hermes-session-key': 'aro-gh-42' },
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('x-hermes-session-id'), 'aro-chat-1');
+  await r.body?.cancel();
+  const last = t.seen.hermes.at(-1);
+  assert.equal(last.auth, `Bearer ${HERMES_KEY}`);
+  assert.equal(last.sessionId, 'aro-chat-1');
+  assert.equal(last.sessionKey, 'aro-gh-42');
+  t.close();
+});
+
+test('hermes: streams tool progress before the turn ends', async () => {
+  const t = await setup();
+  const r = await t.call('POST', '/hermes/v1/chat/completions', { body: '{}' });
+  const reader = r.body.getReader();
+  const first = new TextDecoder().decode((await reader.read()).value);
+  assert.match(first, /event: hermes\.tool\.progress/);
+  await reader.cancel();
+  t.close();
+});
+
+test('hermes: only chat, discovery, and run control are reachable', async () => {
+  const t = await setup();
+  for (const [m, p] of [
+    ['GET', '/hermes/api/sessions/abc/messages'],
+    ['POST', '/hermes/v1/responses'],
+    ['GET', '/hermes/v1/browser-control/ws'],
+    ['POST', '/hermes/v1/artifacts/upload'],
+    ['DELETE', '/hermes/v1/runs/run_1'],
+    ['POST', '/hermes/v1/runs/run_1/other'],
+    ['GET', '/hermes/health'],
+  ]) {
+    const r = await t.call(m, p);
+    await r.body?.cancel();
+    assert.equal(r.status, 404, `${m} ${p}`);
+  }
+  for (const [m, p] of [
+    ['GET', '/hermes/v1/models'],
+    ['GET', '/hermes/v1/capabilities'],
+    ['POST', '/hermes/v1/runs/chatcmpl-abc123/approval'],
+    ['POST', '/hermes/v1/runs/run_abc/stop'],
+  ]) {
+    const r = await t.call(m, p, { body: m === 'POST' ? '{}' : undefined });
+    await r.body?.cancel();
+    assert.notEqual(r.status, 404, `${m} ${p}`);
+  }
+  assert.equal(t.seen.hermes.some((h) => h.path.includes('/api/sessions')), false);
+  t.close();
+});
+
+test('hermes: answers 503 when no Hermes key is configured, without calling upstream', async () => {
+  const t = await setup({ hermesKey: '' });
+  const r = await t.call('POST', '/hermes/v1/chat/completions', { body: '{}' });
+  assert.equal(r.status, 503);
+  assert.equal((await r.json()).error.type, 'hermes_unconfigured');
+  assert.equal(t.seen.hermes.length, 0);
+  t.close();
+});
+
+test('hermes: status reports online, offline, and unconfigured', async () => {
+  const t = await setup();
+  assert.equal((await (await t.call('GET', '/status')).json()).hermes, 'online');
+  t.hermesState.up = false;
+  assert.equal((await (await t.call('GET', '/status')).json()).hermes, 'offline');
+  t.close();
+  const u = await setup({ hermesKey: '' });
+  assert.equal((await (await u.call('GET', '/status')).json()).hermes, 'unconfigured');
+  u.close();
 });

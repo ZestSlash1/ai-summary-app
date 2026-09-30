@@ -11,6 +11,8 @@ export type GpuStatus = {
   bonsai: GpuState;
   comfy: GpuState;
   imageBusy: boolean;
+  /** Hermes Agent in WSL: "unconfigured" until the gateway has its key. */
+  hermes?: "online" | "offline" | "unconfigured";
 };
 
 type Snapshot = { allowed: boolean; status: GpuStatus | null };

@@ -23,6 +23,7 @@ import { extractLatestImage } from '@/lib/imageParts';
 import { createRepoTools, repoSystemPrompt } from '@/lib/repoTools';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isPublicHttpUrl } from '@/lib/safeUrl';
+import { hermesChatResponse } from '@/lib/hermesChat';
 
 // Bonsai answers at about 33 tokens a second and a repo question takes several tool steps,
 // so give a turn the full five minutes Vercel allows on every plan (Fluid compute).
@@ -60,7 +61,7 @@ Only add a path when the code is meant to be saved as a real file in the user's 
 
 type McpConnectorInput = { url: string; authHeader?: string };
 type GithubRepoInput = { owner: string; name: string; branch: string };
-type ModelSource = 'gateway' | 'omniroute' | 'bonsai';
+type ModelSource = 'gateway' | 'omniroute' | 'bonsai' | 'hermes';
 
 let omniroute: ReturnType<typeof createOpenAICompatible> | null = null;
 let bonsai: ReturnType<typeof createOpenAICompatible> | null = null;
@@ -134,6 +135,7 @@ function textOf(message: UIMessage): string {
 
 export async function POST(request: Request) {
   const {
+    id: chatId,
     messages,
     model,
     modelSource,
@@ -141,6 +143,7 @@ export async function POST(request: Request) {
     githubRepo,
     plan,
   }: {
+    id?: string;
     messages: UIMessage[];
     model?: string;
     modelSource?: ModelSource;
@@ -153,6 +156,21 @@ export async function POST(request: Request) {
   // Bonsai is the owner's home GPU: refuse before doing any other work.
   if (modelSource === 'bonsai' && !canUseBonsai(session)) return bonsaiDenied(session);
   const userId = session?.githubUserId;
+
+  // Hermes runs real commands on the owner's PC: same allow list as Bonsai, and it keeps its
+  // own tools, memory, and transcript, so the turn is handed over whole.
+  if (modelSource === 'hermes') {
+    if (!canUseBonsai(session) || !userId) return bonsaiDenied(session, 'Hermes');
+    return hermesChatResponse({
+      messages,
+      chatId,
+      model,
+      githubUserId: userId,
+      repo: githubRepo,
+      plan,
+      signal: request.signal,
+    });
+  }
   const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
   const lastUserText = lastUserMessage ? textOf(lastUserMessage) : '';
 

@@ -3,7 +3,9 @@
 // Sits between the tunnel and the local model servers:
 //   /v1/*     -> llama-server (Bonsai), allowlisted paths only
 //   /comfy/*  -> ComfyUI, allowlisted paths only
-// Every request needs "Authorization: Bearer <ARO_GATEWAY_TOKEN>".
+//   /hermes/* -> Hermes Agent's API server (in WSL), allowlisted paths only
+// Every request needs "Authorization: Bearer <ARO_GATEWAY_TOKEN>". Upstreams get their own
+// keys from this process, so the tunnel token never reaches them and theirs never leave.
 // It also arbitrates the single 12 GB GPU: while an image job runs, chat requests get 503,
 // and an image job only starts once llama-server reports it is asleep (VRAM released).
 
@@ -39,6 +41,9 @@ export function loadConfig(env = {}) {
     llama: (e.LLAMA_URL || 'http://127.0.0.1:8090').replace(/\/$/, ''),
     llamaKey: e.LLAMA_API_KEY || '',
     comfy: (e.COMFY_URL || 'http://127.0.0.1:8188').replace(/\/$/, ''),
+    hermes: (e.HERMES_URL || 'http://127.0.0.1:8642').replace(/\/$/, ''),
+    // Hermes's API_SERVER_KEY. Empty means Hermes is not set up here, and /hermes/* answers 503.
+    hermesKey: e.HERMES_API_KEY || '',
     // 'sleep': wait for llama-server to sleep before an image job. 'off': no GPU arbitration.
     gpuMode: e.GPU_ARBITRATION || 'sleep',
     maxBodyBytes: Number(e.MAX_BODY_BYTES || 20 * 1024 * 1024),
@@ -64,6 +69,19 @@ const COMFY_ALLOW = [
   ['POST', /^\/interrupt$/],
   ['GET', /^\/system_stats$/],
   ['GET', /^\/queue$/],
+];
+// Hermes can run terminal commands on this PC, so only what ARO needs is reachable: chat,
+// discovery, and run control (stop, answer an approval). Session history, browser control,
+// artifacts, and admin routes stay local.
+const RUN_ID = '[A-Za-z0-9_-]{1,100}';
+const HERMES_ALLOW = [
+  ['GET', /^\/v1\/models$/],
+  ['GET', /^\/v1\/capabilities$/],
+  ['POST', /^\/v1\/chat\/completions$/],
+  ['POST', /^\/v1\/runs$/],
+  ['GET', new RegExp(`^/v1/runs/${RUN_ID}$`)],
+  ['GET', new RegExp(`^/v1/runs/${RUN_ID}/events$`)],
+  ['POST', new RegExp(`^/v1/runs/${RUN_ID}/(stop|approval)$`)],
 ];
 // Chat-shaped llama routes that need the GPU (everything except listing models).
 const LLAMA_GPU = /^\/v1\/(chat\/)?completions$/;
@@ -134,6 +152,20 @@ export function createGateway(cfg) {
       return p.is_sleeping === true;
     } catch {
       return null; // unreachable
+    }
+  }
+
+  function hermesAuth() {
+    return { authorization: `Bearer ${cfg.hermesKey}` };
+  }
+
+  async function hermesState() {
+    if (!cfg.hermesKey) return 'unconfigured';
+    try {
+      await getJson(`${cfg.hermes}/v1/capabilities`, 2000, hermesAuth());
+      return 'online';
+    } catch {
+      return 'offline';
     }
   }
 
@@ -253,15 +285,17 @@ export function createGateway(cfg) {
     const { pathname, search } = url;
 
     if (pathname === '/status' && req.method === 'GET') {
-      const [sleeping, comfyUp] = await Promise.all([
+      const [sleeping, comfyUp, hermes] = await Promise.all([
         llamaSleeping(),
         getJson(`${cfg.comfy}/system_stats`, 2000).then(() => true, () => false),
+        hermesState(),
       ]);
       return json(res, 200, {
         bonsai: sleeping === null ? 'offline' : sleeping ? 'sleeping' : state.activeLlm > 0 ? 'busy' : 'online',
         comfy: comfyUp ? (busy() ? 'busy' : 'online') : 'offline',
         imageBusy: busy(),
         activeChats: state.activeLlm,
+        hermes,
       });
     }
 
@@ -287,6 +321,16 @@ export function createGateway(cfg) {
       };
       res.on('close', finish);
       return proxy(req, res, cfg.llama, pathname + search, llamaAuth(), finish);
+    }
+
+    // ---- Hermes Agent
+    if (pathname.startsWith('/hermes/')) {
+      const sub = pathname.slice('/hermes'.length);
+      if (!allowed(HERMES_ALLOW, req.method, sub)) return json(res, 404, { error: { message: 'Not found.' } });
+      if (!cfg.hermesKey) {
+        return json(res, 503, { error: { message: 'Hermes is not set up on this PC.', type: 'hermes_unconfigured' } });
+      }
+      return proxy(req, res, cfg.hermes, sub + search, hermesAuth());
     }
 
     // ---- ComfyUI
@@ -361,6 +405,8 @@ if (isMain) {
   const cfg = loadConfig();
   const server = createGateway(cfg);
   server.listen(cfg.port, cfg.host, () => {
-    console.log(`ARO gateway on http://${cfg.host}:${cfg.port}  llama=${cfg.llama}  comfy=${cfg.comfy}  gpu=${cfg.gpuMode}`);
+    console.log(
+      `ARO gateway on http://${cfg.host}:${cfg.port}  llama=${cfg.llama}  comfy=${cfg.comfy}  hermes=${cfg.hermesKey ? cfg.hermes : 'off'}  gpu=${cfg.gpuMode}`,
+    );
   });
 }

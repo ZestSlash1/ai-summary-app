@@ -17,6 +17,8 @@ import { ImageJobCard } from "./ImageJobCard";
 import { MessageText } from "./chat/Markdown";
 import { ToolActivity, type ToolCall } from "./chat/ToolActivity";
 import { PushCard } from "./chat/PushCard";
+import { HermesApprovalCard } from "./chat/HermesApproval";
+import type { HermesApproval } from "@/lib/hermesStream";
 import { Composer } from "./chat/Composer";
 import {
   WelcomeBanner,
@@ -52,7 +54,7 @@ function chatErrorText(err: Error, source: ModelSource): string {
   } catch {
     // Not JSON: use the message as is.
   }
-  if (/sign in|not allowed|GPU|image edit/i.test(text)) return text;
+  if (/sign in|not allowed|GPU|image edit|Hermes/i.test(text)) return text;
   if (source === "bonsai") {
     return "Bonsai did not respond. Check that the home PC is on (Settings shows its state), then try again.";
   }
@@ -67,7 +69,8 @@ type Block =
   | { kind: "reasoning"; key: string; text: string; live: boolean }
   | { kind: "tools"; key: string; calls: ToolCall[] }
   | { kind: "image"; key: string; url: string; filename?: string }
-  | { kind: "editImage"; key: string; part: Part };
+  | { kind: "editImage"; key: string; part: Part }
+  | { kind: "approval"; key: string; approval: HermesApproval };
 
 function toBlocks(parts: Part[]): Block[] {
   const blocks: Block[] = [];
@@ -79,6 +82,12 @@ function toBlocks(parts: Part[]): Block[] {
 
   parts.forEach((part, i) => {
     if (part.type === "step-start") return;
+    if (part.type === "data-hermes-approval") {
+      flush();
+      const p = part as { id?: string; data: HermesApproval };
+      blocks.push({ kind: "approval", key: p.id ?? `a-${i}`, approval: p.data });
+      return;
+    }
     if (part.type === "reasoning") {
       const p = part as { text?: string; reasoning?: string; state?: string };
       const text = p.reasoning || p.text || "";
@@ -483,9 +492,12 @@ export function ChatPanel({
 
   const firstName = userName?.trim().split(/\s+/)[0];
   const enabledCount = enabledConnectors.filter((c) => c.enabled).length;
+  const onHermes = parseModelRef(model, loadModelSource()).source === "hermes";
   const placeholder = attachment
     ? "Describe the change you want"
-    : githubRepo
+    : onHermes
+      ? "Give Hermes a task to run on your PC"
+      : githubRepo
       ? `Ask about ${githubRepo.name}, or have ARO write code`
       : "Ask ARO to write, explain, or fix code";
 
@@ -608,6 +620,8 @@ export function ChatPanel({
                               className="my-2 block max-h-72 w-auto max-w-full rounded-[14px] border border-nimbus-border"
                             />
                           );
+                        case "approval":
+                          return <HermesApprovalCard key={block.key} approval={block.approval} live={isLive} />;
                         case "editImage": {
                           const p = block.part as {
                             state: string;

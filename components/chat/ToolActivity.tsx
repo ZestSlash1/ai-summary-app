@@ -2,13 +2,19 @@
 
 import { useRef, type ComponentType } from "react";
 import {
+  Brain,
   Calculator,
   Check,
   Clock,
   FileText,
   FolderTree,
+  Globe,
+  ListChecks,
   Plug,
   Search,
+  Sparkles,
+  SquareTerminal,
+  Users,
 } from "lucide-react";
 import { gsap, useGSAP, reducedMotion } from "@/lib/motion";
 
@@ -32,10 +38,25 @@ function num(value: unknown): number | undefined {
   return typeof value === "number" ? value : undefined;
 }
 
+/** Icon for a Hermes Agent tool, by the family its name belongs to. */
+function hermesIcon(name: string): Described["icon"] {
+  if (/terminal|shell|process|execute_code|command/.test(name)) return SquareTerminal;
+  if (/web|browser|search_web|fetch|url/.test(name)) return Globe;
+  if (/file|patch|read|write|search_files|directory/.test(name)) return FileText;
+  if (/memory|session_search|recall/.test(name)) return Brain;
+  if (/skill/.test(name)) return Sparkles;
+  if (/delegate|subagent/.test(name)) return Users;
+  if (/todo|plan/.test(name)) return ListChecks;
+  return Plug;
+}
+
 /** Plain-language row for a tool call, in the running or finished tense. */
 function describe(call: ToolCall, running: boolean): Described {
   const input = call.input ?? {};
   const output = call.output ?? {};
+  // Hermes sends its own readable label ("terminal: npm test"), already in the right words.
+  const hermesLabel = str(input.label);
+  if (hermesLabel) return { icon: hermesIcon(call.name), label: hermesLabel };
   switch (call.name) {
     case "listRepoFiles": {
       const folder = str(input.path);
