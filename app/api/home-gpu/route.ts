@@ -40,9 +40,9 @@ export async function GET() {
       configured: true,
       reachable: true,
       bonsai: pick(body.bonsai),
+      bonsaiContext: typeof body.bonsaiContext === "number" ? body.bonsaiContext : null,
       comfy: pick(body.comfy),
       imageBusy: body.imageBusy === true,
-      // Older gateways do not report Hermes at all: that means it is not set up there.
       hermes: body.hermes === undefined ? "unconfigured" : pickHermes(body.hermes),
     });
   } catch {

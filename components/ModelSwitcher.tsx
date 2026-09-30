@@ -140,11 +140,14 @@ export function ModelSwitcher({
       out.push({ key: "local", kind: "local", title: "On your PC", note: "Bonsai runs on the owner's home PC.", rows: [], locked: true });
     } else if (catalogs.bonsai) {
       const state = bonsaiNow ?? (catalogs.bonsai.failed ? "offline" : undefined);
+      const ctxLabel = gpu?.bonsaiContext ? `${Math.round(gpu.bonsaiContext / 1024)}k context` : null;
+      const baseNote = state ? BONSAI_NOTE[state] : "Runs on your home PC. Private and free.";
+      const note = ctxLabel && state !== "offline" ? `${baseNote} · ${ctxLabel}` : baseNote;
       out.push({
         key: "local",
         kind: "local",
         title: "On your PC · Bonsai",
-        note: state ? BONSAI_NOTE[state] : "Runs on your home PC. Private and free.",
+        note,
         rows: rows("bonsai", "local", catalogs.bonsai.models),
         state,
       });
@@ -192,7 +195,7 @@ export function ModelSwitcher({
       }
     );
     return out;
-  }, [catalogs, homeAllowed, bonsaiNow, hermesState]);
+  }, [catalogs, homeAllowed, bonsaiNow, hermesState, gpu]);
 
   const visibleGroups = useMemo(() => {
     const q = query.trim().toLowerCase();
