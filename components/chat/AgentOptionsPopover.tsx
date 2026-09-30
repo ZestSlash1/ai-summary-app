@@ -11,6 +11,8 @@ import {
   Wrench,
 } from "lucide-react";
 import { PopoverPanel } from "@/components/Popover";
+import { CHIP, CHIP_LABEL_EXTRA, CHIP_ON } from "@/components/ui/classes";
+import { iconWiggle } from "@/lib/motion";
 import type {
   AgentEffort,
   AgentOptions,
@@ -79,22 +81,13 @@ export function AgentOptionsPopover({
         aria-label="Agent options"
         onClick={() => setOpen((prev) => !prev)}
         title="Agent options: effort, permissions, tools, and max steps"
-        className={`flex h-8 items-center gap-1.5 rounded-lg border border-nimbus-border bg-nimbus-surface-2 px-2.5 text-[12px] font-medium text-nimbus-text transition-[color,background-color,border-color,transform] hover:border-nimbus-border-strong hover:bg-nimbus-surface-3 active:scale-95 ${
-          isCustomized
-            ? "border-nimbus-accent/40 bg-nimbus-accent-soft text-nimbus-accent-text"
-            : ""
-        }`}
+        data-wiggle="nudge"
+        onPointerEnter={iconWiggle}
+        className={`${CHIP} ${isCustomized ? CHIP_ON : ""}`}
       >
-        <SlidersHorizontal
-          aria-hidden
-          className={`h-3.5 w-3.5 shrink-0 ${
-            isCustomized ? "text-nimbus-accent" : "text-nimbus-text-muted"
-          }`}
-        />
-        <span>Options</span>
-        {isCustomized && (
-          <span className="h-1.5 w-1.5 rounded-full bg-nimbus-accent" />
-        )}
+        <SlidersHorizontal aria-hidden className="h-3.5 w-3.5 shrink-0" />
+        <span className={CHIP_LABEL_EXTRA}>Options</span>
+        {isCustomized && <span aria-hidden className="aro-pop-in h-1.5 w-1.5 rounded-full bg-nimbus-accent" />}
       </button>
 
       <PopoverPanel

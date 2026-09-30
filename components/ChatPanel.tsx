@@ -4,7 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { ArrowDown, Brain, ChevronRight, ImagePlus, Layers, ListChecks, RotateCw } from "lucide-react";
-import { gsap, useGSAP, Flip, reducedMotion } from "@/lib/motion";
+import { gsap, useGSAP, Flip, iconWiggle, reducedMotion } from "@/lib/motion";
 import { ModelSwitcher } from "./ModelSwitcher";
 import { RepoConnect } from "./RepoConnect";
 import { McpConnectors } from "./McpConnectors";
@@ -30,7 +30,7 @@ import {
   suggestionsFor,
   useWelcomeIntro,
 } from "./chat/Welcome";
-import { CHIP } from "./ui/classes";
+import { CHIP, CHIP_LABEL, CHIP_LABEL_EXTRA, CHIP_ON } from "./ui/classes";
 import { extractPushableFiles } from "@/lib/codeBlocks";
 import type { McpConnector } from "@/lib/mcp";
 import type { AgentOptions, Conversation, GithubRepoLink } from "@/lib/types";
@@ -856,10 +856,12 @@ export function ChatPanel({
         aria-pressed={plan}
         onClick={() => setPlan((p) => !p)}
         title="Plan mode: ARO outlines the steps before doing the work"
-        className={`${CHIP} ${plan ? "border-nimbus-accent/40 bg-nimbus-accent-soft text-nimbus-accent-text hover:bg-nimbus-accent-soft hover:text-nimbus-accent-text" : ""}`}
+        data-wiggle="pop"
+        onPointerEnter={iconWiggle}
+        className={`${CHIP} ${plan ? CHIP_ON : ""}`}
       >
         <ListChecks aria-hidden className="h-3.5 w-3.5" />
-        Plan
+        <span className={CHIP_LABEL}>Plan</span>
       </button>
       <AgentOptionsPopover options={agentOptions} onChange={handleAgentOptionsChange} />
       <SkillsPicker onOpenSkillsTab={mode === "code" ? () => setWorkspaceOpen(true) : undefined} />
@@ -869,10 +871,12 @@ export function ChatPanel({
           aria-pressed={workspaceOpen}
           onClick={() => setWorkspaceOpen((v) => !v)}
           title="Toggle workspace rail"
-          className={`${CHIP} ${workspaceOpen ? "border-nimbus-accent/40 bg-nimbus-accent-soft text-nimbus-accent-text hover:bg-nimbus-accent-soft hover:text-nimbus-accent-text" : ""}`}
+          data-wiggle="pop"
+          onPointerEnter={iconWiggle}
+          className={`${CHIP} ${workspaceOpen ? CHIP_ON : ""}`}
         >
           <Layers aria-hidden className="h-3.5 w-3.5" />
-          Workspace
+          <span className={CHIP_LABEL_EXTRA}>Workspace</span>
           {pendingChangesCount > 0 && (
             <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-nimbus-accent px-1 text-[10px] font-semibold text-white">
               {pendingChangesCount}

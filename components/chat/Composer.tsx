@@ -2,9 +2,10 @@
 
 import { forwardRef, useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
 import { ArrowUp, Loader2, Paperclip, Square, X } from "lucide-react";
-import { gsap, useGSAP, reducedMotion } from "@/lib/motion";
+import { gsap, useGSAP, iconWiggle, reducedMotion } from "@/lib/motion";
 import { ACCEPTED_IMAGE_TYPES, type PreparedImage } from "@/lib/imageResize";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+import { CHIP } from "../ui/classes";
 import { SlashCommandMenu, matchSlashCommands, type SlashCommand } from "./SlashCommandMenu";
 
 const MAX_TEXTAREA_PX = 220;
@@ -58,10 +59,14 @@ export const Composer = forwardRef<
   },
   ref
 ) {
-  const sendLabelRef = useRef<HTMLSpanElement>(null);
+  const sendLayerRef = useRef<HTMLSpanElement>(null);
+  const stopLayerRef = useRef<HTMLSpanElement>(null);
+  const arrowRef = useRef<SVGSVGElement>(null);
+  const shownStreaming = useRef<boolean | null>(null);
+  const wasReady = useRef(canSend);
+  const controlsRef = useRef<HTMLDivElement>(null);
   // On touch keyboards Enter is the only way to start a new line, so there it does not send.
   const touch = useMediaQuery("(pointer: coarse)");
-  const firstRender = useRef(true);
 
   // Grow with the text up to a cap, then scroll inside.
   useLayoutEffect(() => {
@@ -71,22 +76,83 @@ export const Composer = forwardRef<
     el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_PX)}px`;
   }, [value, textareaRef]);
 
-  // Send and Stop trade places with a short vertical roll, so the switch is noticed.
+  // Send and Stop are one button. When a reply starts, the arrow takes off and Stop rises
+  // into its place; when the reply ends, Send drops back in. The colors cross-fade in CSS.
   useGSAP(
     () => {
-      if (firstRender.current) {
-        requestAnimationFrame(() => (firstRender.current = false));
+      const send = sendLayerRef.current;
+      const stop = stopLayerRef.current;
+      const arrow = arrowRef.current;
+      if (!send || !stop || !arrow) return;
+      const previous = shownStreaming.current;
+      shownStreaming.current = streaming;
+      const [shown, hidden] = streaming ? [stop, send] : [send, stop];
+      gsap.killTweensOf([send, stop, arrow]);
+      if (previous === null || previous === streaming || reducedMotion()) {
+        gsap.set(shown, { autoAlpha: 1, yPercent: 0 });
+        gsap.set(hidden, { autoAlpha: 0 });
+        gsap.set(arrow, { y: 0, autoAlpha: 1 });
         return;
       }
-      if (!sendLabelRef.current) return;
-      gsap.fromTo(
-        sendLabelRef.current,
-        { yPercent: streaming ? 60 : -60, autoAlpha: 0 },
-        { yPercent: 0, autoAlpha: 1, duration: reducedMotion() ? 0 : 0.35, ease: "aro" }
-      );
+      if (streaming) {
+        gsap
+          .timeline()
+          .to(arrow, { y: -16, autoAlpha: 0, duration: 0.22, ease: "aro-in" })
+          .to(send, { yPercent: -80, autoAlpha: 0, duration: 0.2, ease: "aro-in" }, 0.05)
+          .fromTo(stop, { yPercent: 80, autoAlpha: 0 }, { yPercent: 0, autoAlpha: 1, duration: 0.42, ease: "aro" }, 0.12)
+          .set(arrow, { y: 0, autoAlpha: 1 });
+      } else {
+        gsap
+          .timeline()
+          .to(stop, { yPercent: 80, autoAlpha: 0, duration: 0.18, ease: "aro-in" })
+          .fromTo(send, { yPercent: -80, autoAlpha: 0 }, { yPercent: 0, autoAlpha: 1, duration: 0.42, ease: "aro" }, 0.08);
+      }
     },
     { dependencies: [streaming] }
   );
+
+  // Send wakes up the moment there is something to send: a small swell and the arrow lifts.
+  useGSAP(
+    () => {
+      const ready = canSend && !streaming;
+      const woke = ready && !wasReady.current;
+      wasReady.current = ready;
+      if (!woke || reducedMotion() || !sendLayerRef.current || !arrowRef.current) return;
+      gsap.fromTo(sendLayerRef.current, { scale: 0.9 }, { scale: 1, duration: 0.45, ease: "aro" });
+      gsap.fromTo(arrowRef.current, { y: 5 }, { y: 0, duration: 0.5, ease: "aro" });
+    },
+    { dependencies: [canSend, streaming] }
+  );
+
+  // The controls row scrolls only when its chips still do not fit after folding their labels,
+  // and then fades the edge that hides more of them.
+  useLayoutEffect(() => {
+    const row = controlsRef.current;
+    if (!row) return;
+    const update = () => {
+      const overflow = row.scrollWidth - row.clientWidth > 1;
+      const atStart = row.scrollLeft <= 1;
+      const atEnd = row.scrollLeft >= row.scrollWidth - row.clientWidth - 1;
+      row.dataset.fade = !overflow ? "none" : atStart ? "end" : atEnd ? "start" : "both";
+    };
+    const resize = new ResizeObserver(update);
+    const watch = () => {
+      resize.disconnect();
+      resize.observe(row);
+      for (const child of Array.from(row.children)) resize.observe(child);
+      update();
+    };
+    // Chips come and go (Workspace in coding chats, the attach button with image models).
+    const mutations = new MutationObserver(watch);
+    mutations.observe(row, { childList: true });
+    watch();
+    row.addEventListener("scroll", update, { passive: true });
+    return () => {
+      resize.disconnect();
+      mutations.disconnect();
+      row.removeEventListener("scroll", update);
+    };
+  }, []);
 
   const showSlashMenu = value.startsWith("/") && !value.slice(1).includes(" ");
   // While the menu lists commands, Enter is its to pick one: the menu listens on window,
@@ -190,7 +256,11 @@ export const Composer = forwardRef<
       />
 
       <div className="flex items-center gap-2 px-2.5 pb-2.5 pt-1">
-        <div className="aro-no-scrollbar -my-2 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-2 max-sm:[mask-image:linear-gradient(90deg,#000_85%,transparent)] sm:overflow-visible">
+        <div
+          ref={controlsRef}
+          data-fade="none"
+          className="aro-no-scrollbar @container/controls -mx-1 -my-2 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-1 py-2 data-[fade=both]:[mask-image:linear-gradient(90deg,transparent,#000_28px,#000_calc(100%_-_28px),transparent)] data-[fade=end]:[mask-image:linear-gradient(90deg,#000_calc(100%_-_28px),transparent)] data-[fade=start]:[mask-image:linear-gradient(90deg,transparent,#000_28px)]"
+        >
           {canAttach && (
             <>
               <input
@@ -208,10 +278,11 @@ export const Composer = forwardRef<
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
+                onPointerEnter={iconWiggle}
                 disabled={streaming || preparing}
                 aria-label="Attach an image to edit"
                 title="Attach an image to edit"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-nimbus-border text-nimbus-text-muted transition-[color,background-color,transform] duration-200 hover:bg-nimbus-surface-2 hover:text-nimbus-text active:scale-90 disabled:opacity-40"
+                className={`${CHIP} w-8 justify-center px-0 disabled:pointer-events-none disabled:opacity-40`}
               >
                 <Paperclip aria-hidden className="h-3.5 w-3.5" />
               </button>
@@ -220,32 +291,35 @@ export const Composer = forwardRef<
           {controls}
         </div>
 
-        {streaming ? (
-          <button
-            type="button"
-            onClick={onStop}
-            aria-label="Stop the reply"
-            className="flex h-8 shrink-0 items-center gap-1.5 overflow-hidden rounded-lg border border-nimbus-border-strong bg-nimbus-surface-2 px-3 text-[13px] font-medium text-nimbus-text transition-[background-color,transform] duration-200 hover:bg-nimbus-surface-3 active:scale-95"
+        {/* One button that is Send, or Stop while a reply streams. Both faces sit in the same grid
+            cell, so it keeps its size, and the swap animates in the effect above. */}
+        <button
+          type="button"
+          onClick={streaming ? onStop : onSubmit}
+          disabled={!streaming && !canSend}
+          aria-label={streaming ? "Stop the reply" : "Send message"}
+          data-streaming={streaming || undefined}
+          className="group/send grid h-8 shrink-0 place-items-center overflow-hidden rounded-lg border border-transparent bg-nimbus-accent px-3 text-[13px] font-medium text-white shadow-[var(--nimbus-glow)] transition-[background-color,border-color,color,box-shadow,scale] duration-300 ease-[var(--nimbus-ease)] hover:bg-nimbus-accent-hover hover:shadow-[0_10px_26px_-8px_rgba(19,95,235,0.9)] active:bg-nimbus-accent-press motion-safe:active:scale-[0.94] motion-safe:active:duration-100 disabled:bg-nimbus-surface-3 disabled:text-nimbus-text-faint disabled:shadow-none data-[streaming]:border-nimbus-border-strong data-[streaming]:bg-nimbus-surface-2 data-[streaming]:text-nimbus-text data-[streaming]:shadow-none data-[streaming]:hover:bg-nimbus-surface-3"
+        >
+          <span
+            ref={sendLayerRef}
+            aria-hidden={streaming}
+            className={`col-start-1 row-start-1 flex items-center gap-1.5 ${streaming ? "invisible opacity-0" : ""}`}
           >
-            <span ref={sendLabelRef} className="flex items-center gap-1.5">
-              <Square aria-hidden className="h-3 w-3 fill-current" />
-              <span className="max-sm:sr-only">Stop</span>
+            <span className="max-sm:sr-only">Send</span>
+            <span className="flex transition-[translate] duration-300 ease-[var(--nimbus-ease)] motion-safe:group-enabled/send:group-hover/send:-translate-y-0.5">
+              <ArrowUp ref={arrowRef} aria-hidden className="h-3.5 w-3.5" />
             </span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={!canSend}
-            aria-label="Send message"
-            className="flex h-8 shrink-0 items-center gap-1.5 overflow-hidden rounded-lg bg-nimbus-accent px-3 text-[13px] font-medium text-white shadow-[var(--nimbus-glow)] transition-[background-color,transform,opacity,box-shadow] duration-200 hover:bg-nimbus-accent-hover active:scale-95 disabled:bg-nimbus-surface-3 disabled:text-nimbus-text-faint disabled:shadow-none"
+          </span>
+          <span
+            ref={stopLayerRef}
+            aria-hidden={!streaming}
+            className={`col-start-1 row-start-1 flex items-center gap-1.5 ${streaming ? "" : "invisible opacity-0"}`}
           >
-            <span ref={sendLabelRef} className="flex items-center gap-1.5">
-              <span className="max-sm:sr-only">Send</span>
-              <ArrowUp aria-hidden className="h-3.5 w-3.5" />
-            </span>
-          </button>
-        )}
+            <Square aria-hidden className="h-3 w-3 fill-current" />
+            <span className="max-sm:sr-only">Stop</span>
+          </span>
+        </button>
       </div>
     </div>
   );

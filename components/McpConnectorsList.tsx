@@ -6,6 +6,7 @@ import type { McpConnector } from "@/lib/mcp";
 import { bearerHeader, loadConnectors, saveConnectors, subscribeConnectors } from "@/lib/mcp";
 import { MCP_CATALOG, MCP_CATALOG_GROUPS, catalogConnector, type McpCatalogEntry } from "@/lib/mcpCatalog";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD, MENU_LABEL } from "./ui/classes";
+import { iconWiggle } from "@/lib/motion";
 
 type Preview = { serverName?: string; tools?: { name: string }[] };
 
@@ -34,20 +35,21 @@ function Switch({ checked, label, disabled, onClick }: { checked: boolean; label
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-300 disabled:opacity-50 ${
-        checked ? "bg-nimbus-accent" : "bg-nimbus-surface-3"
+      className={`group/switch relative h-5 w-9 shrink-0 rounded-full transition-colors duration-300 disabled:opacity-50 ${
+        checked ? "bg-nimbus-accent" : "bg-nimbus-surface-3 hover:bg-nimbus-border-strong"
       }`}
     >
+      {/* The knob stretches while pressed, toward where it is about to go. */}
       <span
-        className={`absolute left-0 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-300 ease-[var(--nimbus-ease)] ${
-          checked ? "translate-x-[18px]" : "translate-x-0.5"
+        className={`absolute left-0 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-[translate,width] duration-300 ease-[var(--nimbus-ease)] motion-safe:group-active/switch:w-5 ${
+          checked ? "translate-x-[18px] motion-safe:group-active/switch:translate-x-[14px]" : "translate-x-0.5"
         }`}
       />
     </button>
   );
 }
 
-const ROW = "rounded-lg px-2.5 py-2 transition-colors duration-150 hover:bg-nimbus-surface-2";
+const ROW = "rounded-lg px-2.5 py-2 transition-colors duration-200 ease-[var(--nimbus-ease)] hover:bg-nimbus-surface-2";
 const REMOVE =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-nimbus-text-faint transition-colors hover:bg-nimbus-danger-soft hover:text-nimbus-danger";
 
@@ -72,6 +74,15 @@ export function McpConnectorsList({
   const [keyFor, setKeyFor] = useState<string | null>(null);
   const [keyDraft, setKeyDraft] = useState("");
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
+  // The row that just switched on glows once, so the change registers.
+  const [flash, setFlash] = useState<string | null>(null);
+  const flashTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(flashTimer.current), []);
+  function celebrate(id: string) {
+    setFlash(id);
+    window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlash(null), 1400);
+  }
 
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -108,6 +119,7 @@ export function McpConnectorsList({
         toolNames: (data.tools ?? []).map((t) => t.name),
       });
       update((current) => [...current.filter((c) => c.catalogId !== entry.id), connector]);
+      celebrate(entry.id);
       setKeyFor(null);
       setKeyDraft("");
     } catch (err) {
@@ -119,7 +131,9 @@ export function McpConnectorsList({
 
   function toggleCatalog(entry: McpCatalogEntry) {
     setRowError(null);
-    if (connectors.some((c) => c.catalogId === entry.id)) {
+    const saved = connectors.find((c) => c.catalogId === entry.id);
+    if (saved) {
+      if (!saved.enabled) celebrate(entry.id);
       update((current) => current.map((c) => (c.catalogId === entry.id ? { ...c, enabled: !c.enabled } : c)));
     } else if (entry.key) {
       setKeyFor(keyFor === entry.id ? null : entry.id);
@@ -144,6 +158,7 @@ export function McpConnectorsList({
         toolNames: (data.tools ?? []).map((t) => t.name),
       };
       update((current) => [...current, connector]);
+      celebrate(connector.id);
       setName("");
       setUrl("");
       setAuthHeader("");
@@ -166,7 +181,7 @@ export function McpConnectorsList({
             const saved = connectors.find((c) => c.catalogId === entry.id);
             const connecting = pending === entry.id;
             return (
-              <div key={entry.id} className={ROW}>
+              <div key={entry.id} className={`${ROW} ${flash === entry.id ? "aro-flash" : ""}`}>
                 <div className="flex items-center gap-2.5">
                   <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-1.5 text-[13px] text-nimbus-text">
@@ -179,7 +194,7 @@ export function McpConnectorsList({
                     </p>
                     <p className="text-[11.5px] leading-snug text-nimbus-text-muted">
                       {entry.blurb}
-                      {saved ? ` ${toolCount(saved.toolNames)}.` : ""}
+                      {saved && <span className="nimbus-fade-in">{` ${toolCount(saved.toolNames)}.`}</span>}
                     </p>
                   </div>
                   {connecting && <Loader2 aria-label="Connecting" className="h-3.5 w-3.5 shrink-0 animate-spin text-nimbus-text-muted" />}
@@ -202,7 +217,7 @@ export function McpConnectorsList({
                       e.preventDefault();
                       if (keyDraft.trim()) void connectCatalog(entry, keyDraft);
                     }}
-                    className="mt-2 flex flex-col gap-1.5"
+                    className="nimbus-fade-in mt-2 flex flex-col gap-1.5"
                   >
                     <input
                       type="password"
@@ -249,7 +264,7 @@ export function McpConnectorsList({
       <section aria-label="Your own servers" className="flex flex-col">
         <p className={MENU_LABEL}>Your own servers</p>
         {custom.map((c) => (
-          <div key={c.id} className={`${ROW} flex items-center gap-2.5`}>
+          <div key={c.id} className={`${ROW} flex items-center gap-2.5 ${flash === c.id ? "aro-flash" : ""}`}>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] text-nimbus-text">{c.name}</p>
               <p className="truncate text-[11.5px] text-nimbus-text-muted">{toolCount(c.toolNames)}</p>
@@ -257,7 +272,10 @@ export function McpConnectorsList({
             <Switch
               checked={c.enabled}
               label={c.name}
-              onClick={() => update((current) => current.map((x) => (x.id === c.id ? { ...x, enabled: !x.enabled } : x)))}
+              onClick={() => {
+                if (!c.enabled) celebrate(c.id);
+                update((current) => current.map((x) => (x.id === c.id ? { ...x, enabled: !x.enabled } : x)));
+              }}
             />
             <button type="button" onClick={() => update((current) => current.filter((x) => x.id !== c.id))} aria-label={`Remove ${c.name}`} className={REMOVE}>
               <Trash2 aria-hidden className="h-3.5 w-3.5" />
@@ -271,7 +289,7 @@ export function McpConnectorsList({
               e.preventDefault();
               void addConnector();
             }}
-            className="flex flex-col gap-1.5 px-0.5 pt-1"
+            className="nimbus-fade-in flex flex-col gap-1.5 px-0.5 pt-1"
           >
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (optional)" aria-label="Connector name" className={FIELD} />
             <input
@@ -307,7 +325,9 @@ export function McpConnectorsList({
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] text-nimbus-text-muted transition-colors hover:bg-nimbus-surface-2 hover:text-nimbus-text"
+            data-wiggle="spin"
+            onPointerEnter={iconWiggle}
+            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] text-nimbus-text-muted transition-[color,background-color,scale] duration-200 ease-[var(--nimbus-ease)] hover:bg-nimbus-surface-2 hover:text-nimbus-text motion-safe:active:scale-[0.98]"
           >
             <Plus aria-hidden className="h-3.5 w-3.5" />
             Add a server by URL

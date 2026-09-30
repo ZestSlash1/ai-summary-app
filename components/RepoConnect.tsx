@@ -7,7 +7,8 @@ import type { GithubRepoLink } from "@/lib/types";
 import { GithubMark } from "./BrandMark";
 import { PopoverPanel } from "./Popover";
 import { useToast } from "./Toaster";
-import { CHIP, FIELD, MENU_LABEL, MENU_ROW } from "./ui/classes";
+import { CHIP, CHIP_LABEL_REPO, FIELD, MENU_LABEL, MENU_ROW } from "./ui/classes";
+import { iconWiggle } from "@/lib/motion";
 
 type RepoOption = {
   owner: string;
@@ -139,13 +140,16 @@ export function RepoConnect({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="dialog"
+        title={value ? `${value.owner}/${value.name}` : "Connect a GitHub repo"}
+        data-wiggle="wiggle"
+        onPointerEnter={iconWiggle}
         className={CHIP}
       >
         <GithubMark className="h-3.5 w-3.5 shrink-0" />
-        <span className="max-w-[10rem] truncate">{value ? value.name : "Connect repo"}</span>
+        <span className={`max-w-[10rem] truncate ${CHIP_LABEL_REPO}`}>{value ? value.name : "Connect repo"}</span>
         <ChevronDown
           aria-hidden
-          className={`h-3.5 w-3.5 shrink-0 opacity-70 transition-transform duration-300 ${open ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 shrink-0 opacity-70 transition-transform duration-300 ease-[var(--nimbus-ease)] ${open ? "rotate-180" : ""}`}
         />
       </button>
 
