@@ -12,6 +12,7 @@ import { SkillPrompt } from "./SkillPrompt";
 import { MessageActions } from "./MessageActions";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { AssistantAvatar } from "./BrandMark";
+import { AroField } from "./AroField";
 import { ImageJobCard } from "./ImageJobCard";
 import { MessageText } from "./chat/Markdown";
 import { ToolActivity, type ToolCall } from "./chat/ToolActivity";
@@ -517,8 +518,11 @@ export function ChatPanel({
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
-      className="relative flex h-full min-h-0 flex-col"
+      className="relative isolate flex h-full min-h-0 flex-col"
     >
+      {/* Ambient particles behind the welcome screen; fades away once the chat starts. */}
+      <AroField active={isEmpty && active} scopeRef={containerRef} />
+
       {isEmpty && (
         <div className="absolute inset-x-0 top-4 z-10 flex justify-center">
           <WelcomeBanner signedIn={signedIn} repo={githubRepo} onConnectRepo={() => setRepoPromptOpen(true)} />
