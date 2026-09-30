@@ -1,4 +1,5 @@
 import { createMCPClient } from "@ai-sdk/mcp";
+import { isPublicHttpUrl } from "@/lib/safeUrl";
 
 export async function POST(request: Request) {
   const { url, authHeader } = (await request.json()) as {
@@ -8,6 +9,12 @@ export async function POST(request: Request) {
 
   if (!url?.trim()) {
     return Response.json({ error: "Server URL is required." }, { status: 400 });
+  }
+  if (!isPublicHttpUrl(url.trim())) {
+    return Response.json(
+      { error: "Use a public http or https address. Local and private network addresses are not allowed." },
+      { status: 400 }
+    );
   }
 
   let client;

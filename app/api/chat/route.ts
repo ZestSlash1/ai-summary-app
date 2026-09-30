@@ -21,6 +21,8 @@ import { canUseBonsai, bonsaiDenied } from '@/lib/access';
 import { comfy, friendlyComfyError } from '@/lib/comfy';
 import { extractLatestImage } from '@/lib/imageParts';
 import { createRepoTools, repoSystemPrompt } from '@/lib/repoTools';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import { isPublicHttpUrl } from '@/lib/safeUrl';
 
 // Bonsai answers at about 33 tokens a second and a repo question takes several tool steps,
 // so give a turn the full five minutes Vercel allows on every plan (Fluid compute).
@@ -95,6 +97,34 @@ function resolveModel(model: string, source: ModelSource | undefined) {
   return model;
 }
 
+// Tool results from earlier turns (a whole file, a long listing) are re-sent with every
+// message. Past this size they are replaced with a note: the model can call the tool again,
+// and a 32k-context model like Bonsai does not run out of room halfway through a chat.
+const MAX_HISTORY_TOOL_OUTPUT = 1500;
+
+function compactHistory(messages: UIMessage[]): UIMessage[] {
+  let lastUser = -1;
+  messages.forEach((m, i) => {
+    if (m.role === 'user') lastUser = i;
+  });
+  return messages.map((message, i) => {
+    if (i >= lastUser || message.role !== 'assistant') return message;
+    let changed = false;
+    const parts = message.parts.map((part) => {
+      const p = part as { type: string; state?: string; output?: unknown };
+      const isTool = p.type.startsWith('tool-') || p.type === 'dynamic-tool';
+      if (!isTool || p.state !== 'output-available' || p.type === 'tool-editImage') return part;
+      if (JSON.stringify(p.output ?? null).length <= MAX_HISTORY_TOOL_OUTPUT) return part;
+      changed = true;
+      return {
+        ...part,
+        output: { omitted: 'Large result from an earlier turn, left out to save context. Call the tool again if you need it.' },
+      } as typeof part;
+    });
+    return changed ? { ...message, parts } : message;
+  });
+}
+
 function textOf(message: UIMessage): string {
   return message.parts
     .filter((p) => p.type === 'text')
@@ -127,7 +157,8 @@ export async function POST(request: Request) {
   const lastUserText = lastUserMessage ? textOf(lastUserMessage) : '';
 
   const mcpClients = await Promise.all(
-    (mcpConnectors ?? []).map((connector) =>
+    // Only public addresses: the server must not be steered at internal hosts.
+    (mcpConnectors ?? []).filter((c) => isPublicHttpUrl(c.url)).map((connector) =>
       createMCPClient({
         transport: {
           type: 'http',
@@ -200,7 +231,7 @@ export async function POST(request: Request) {
 
   // Project memory: recall relevant chunks from a connected repo, so the
   // assistant isn't starting cold each session.
-  if (userId && githubRepo && lastUserText.trim()) {
+  if (userId && githubRepo && lastUserText.trim() && isSupabaseConfigured()) {
     try {
       const matches = await retrieveMemory(
         userId,
@@ -221,7 +252,7 @@ export async function POST(request: Request) {
   // Learned skills: mention approved ones so the model knows what it can
   // proactively offer, and log a signal when the message doesn't match
   // anything known yet (the autonomous-discovery input).
-  if (userId) {
+  if (userId && isSupabaseConfigured()) {
     try {
       const { approved } = await getUserSkills(userId);
       if (approved.length > 0) {
@@ -264,7 +295,7 @@ export async function POST(request: Request) {
   const result = streamText({
     model: resolveModel(model || (await resolveDefaultModel()), modelSource),
     system: systemPrompt,
-    messages: await convertToModelMessages(messages),
+    messages: await convertToModelMessages(compactHistory(messages)),
     tools,
     // The edit result is shown by the UI, so end the turn there: another model step would
     // only compete with the image job for the GPU.

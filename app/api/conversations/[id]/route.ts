@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { supabase } from "@/lib/supabase";
+import { isSupabaseConfigured, supabase, supabaseMissing } from "@/lib/supabase";
 
 export async function PATCH(
   request: Request,
@@ -9,6 +9,7 @@ export async function PATCH(
   if (!session?.githubUserId) {
     return Response.json({ error: "Not signed in." }, { status: 401 });
   }
+  if (!isSupabaseConfigured()) return supabaseMissing();
   const { id } = await ctx.params;
 
   const body = (await request.json()) as {
@@ -45,6 +46,7 @@ export async function DELETE(
   if (!session?.githubUserId) {
     return Response.json({ error: "Not signed in." }, { status: 401 });
   }
+  if (!isSupabaseConfigured()) return supabaseMissing();
   const { id } = await ctx.params;
 
   const { error } = await supabase
