@@ -13,10 +13,10 @@ function Test-Port($port) {
 if (Test-Port 8090) {
     Write-Host "llama-server already running on 8090"
 } else {
-    Write-Host "Starting llama-server (context 32768, sleeps after 20 s idle so image jobs can use the GPU) ..."
-    $env:BONSAI_CTX = "32768"
+    Write-Host "Starting llama-server (context 65536, sleeps after 20 s idle so image jobs can use the GPU) ..."
+    $env:BONSAI_CTX = "65536"
     Start-Process -FilePath powershell.exe -WindowStyle Hidden -WorkingDirectory $BonsaiDir `
-        -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', '.\scripts\start_llama_server.ps1', '--sleep-idle-seconds', '20', '--alias', 'bonsai-2-27b' `
+        -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', '.\scripts\start_llama_server.ps1', '--cache-type-k', 'q8_0', '--cache-type-v', 'q8_0', '--flash-attn', 'on', '--sleep-idle-seconds', '20', '--alias', 'bonsai-2-27b' `
         -RedirectStandardOutput "$LogDir\llama.out" -RedirectStandardError "$LogDir\llama.err"
 }
 

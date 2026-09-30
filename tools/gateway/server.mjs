@@ -146,13 +146,21 @@ export function createGateway(cfg) {
     return false;
   }
 
-  async function llamaSleeping() {
+  async function llamaProps() {
     try {
       const p = await getJson(`${cfg.llama}/props`, 2000, llamaAuth());
-      return p.is_sleeping === true;
+      return {
+        sleeping: p.is_sleeping === true,
+        context: p.default_generation_settings?.n_ctx || null,
+      };
     } catch {
-      return null; // unreachable
+      return null;
     }
+  }
+
+  async function llamaSleeping() {
+    const p = await llamaProps();
+    return p === null ? null : p.sleeping;
   }
 
   function hermesAuth() {
@@ -285,13 +293,14 @@ export function createGateway(cfg) {
     const { pathname, search } = url;
 
     if (pathname === '/status' && req.method === 'GET') {
-      const [sleeping, comfyUp, hermes] = await Promise.all([
-        llamaSleeping(),
+      const [llamaInfo, comfyUp, hermes] = await Promise.all([
+        llamaProps(),
         getJson(`${cfg.comfy}/system_stats`, 2000).then(() => true, () => false),
         hermesState(),
       ]);
       return json(res, 200, {
-        bonsai: sleeping === null ? 'offline' : sleeping ? 'sleeping' : state.activeLlm > 0 ? 'busy' : 'online',
+        bonsai: llamaInfo === null ? 'offline' : llamaInfo.sleeping ? 'sleeping' : state.activeLlm > 0 ? 'busy' : 'online',
+        bonsaiContext: llamaInfo?.context ?? null,
         comfy: comfyUp ? (busy() ? 'busy' : 'online') : 'offline',
         imageBusy: busy(),
         activeChats: state.activeLlm,
@@ -397,6 +406,12 @@ export function createGateway(cfg) {
     });
   });
   server.state = state;
+  server.handle = (req, res) =>
+    handle(req, res).catch((err) => {
+      console.error('gateway error:', err?.message);
+      if (!res.headersSent) json(res, 500, { error: { message: 'Gateway error.' } });
+      else res.destroy();
+    });
   return server;
 }
 
