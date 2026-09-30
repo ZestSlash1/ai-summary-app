@@ -56,6 +56,17 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   },
 ];
 
+/** The commands a composer value such as "/mo" matches. */
+export function matchSlashCommands(query: string): SlashCommand[] {
+  const cleanQuery = query.startsWith("/") ? query.slice(1).trim().toLowerCase() : query.trim().toLowerCase();
+  return SLASH_COMMANDS.filter(
+    (cmd) =>
+      cmd.id.toLowerCase().includes(cleanQuery) ||
+      cmd.label.toLowerCase().includes(cleanQuery) ||
+      cmd.description.toLowerCase().includes(cleanQuery)
+  );
+}
+
 interface SlashCommandMenuProps {
   query: string;
   onSelect: (commandId: SlashCommand["id"]) => void;
@@ -72,12 +83,7 @@ export function SlashCommandMenu({
 
   const cleanQuery = query.startsWith("/") ? query.slice(1).trim().toLowerCase() : query.trim().toLowerCase();
 
-  const filtered = SLASH_COMMANDS.filter(
-    (cmd) =>
-      cmd.id.toLowerCase().includes(cleanQuery) ||
-      cmd.label.toLowerCase().includes(cleanQuery) ||
-      cmd.description.toLowerCase().includes(cleanQuery)
-  );
+  const filtered = matchSlashCommands(query);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

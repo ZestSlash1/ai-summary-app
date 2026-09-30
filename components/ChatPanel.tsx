@@ -392,6 +392,7 @@ export function ChatPanel({
 
   const [input, setInput] = useState("");
   const [mcpOpen, setMcpOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
   const [repoPromptOpen, setRepoPromptOpen] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(mode === "code");
 
@@ -654,8 +655,7 @@ export function ChatPanel({
         break;
       }
       case "model": {
-        const btn = document.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]');
-        btn?.click();
+        setModelOpen(true);
         break;
       }
       case "skills": {
@@ -831,7 +831,12 @@ export function ChatPanel({
           onForceOpenHandled={() => setRepoPromptOpen(false)}
         />
       )}
-      <ModelSwitcher value={model} onChange={(m) => onModelChange(conversationId, m)} />
+      <ModelSwitcher
+        value={model}
+        onChange={(m) => onModelChange(conversationId, m)}
+        open={modelOpen}
+        onOpenChange={setModelOpen}
+      />
       {mode !== "code" && (
         <RepoConnect
           value={githubRepo}
