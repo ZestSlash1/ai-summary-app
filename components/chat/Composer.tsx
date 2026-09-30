@@ -6,6 +6,7 @@ import { gsap, useGSAP, iconWiggle, reducedMotion } from "@/lib/motion";
 import { ACCEPTED_IMAGE_TYPES, type PreparedImage } from "@/lib/imageResize";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { CHIP } from "../ui/classes";
+import { LiquidRefraction } from "../LiquidRefraction";
 import { SlashCommandMenu, matchSlashCommands, type SlashCommand } from "./SlashCommandMenu";
 
 const MAX_TEXTAREA_PX = 220;
@@ -65,6 +66,7 @@ export const Composer = forwardRef<
   const shownStreaming = useRef<boolean | null>(null);
   const wasReady = useRef(canSend);
   const controlsRef = useRef<HTMLDivElement>(null);
+  const glassRef = useRef<HTMLDivElement | null>(null);
   // On touch keyboards Enter is the only way to start a new line, so there it does not send.
   const touch = useMediaQuery("(pointer: coarse)");
 
@@ -166,10 +168,22 @@ export const Composer = forwardRef<
 
   return (
     <div
-      ref={ref}
+      ref={(node) => {
+        glassRef.current = node;
+        if (typeof ref === "function") ref(node);
+        else if (ref) ref.current = node;
+      }}
       data-dragging={dragging || undefined}
-      className="group/composer relative rounded-[16px] border border-nimbus-border-strong bg-nimbus-surface shadow-[var(--nimbus-inset-highlight),var(--nimbus-shadow)] transition-[border-color,box-shadow] duration-300 focus-within:border-nimbus-accent/50 focus-within:shadow-[0_0_0_4px_var(--nimbus-accent-soft),var(--nimbus-shadow)] data-[dragging]:border-nimbus-accent data-[dragging]:shadow-[0_0_0_4px_var(--nimbus-accent-soft)]"
+      data-streaming={streaming || undefined}
+      className="aro-glass group/composer relative rounded-[18px] border transition-[border-color,box-shadow] duration-500 ease-[var(--nimbus-ease)] focus-within:border-nimbus-accent/45 focus-within:shadow-[var(--glass-rim),0_0_0_4px_var(--nimbus-accent-soft),0_18px_50px_-16px_rgba(19,95,235,0.5)] data-[dragging]:border-nimbus-accent data-[dragging]:shadow-[var(--glass-rim),0_0_0_4px_var(--nimbus-accent-soft)]"
     >
+      {/* The composer is glass over the conversation: it bends what passes behind its rim. */}
+      <LiquidRefraction target={glassRef} />
+      {/* While ARO replies, two lights run the rim: the composer is working, not waiting. */}
+      <span aria-hidden data-on={streaming || undefined} className="aro-beam" style={{ ["--beam-radius" as string]: "18px" }}>
+        <span />
+        <span />
+      </span>
       {showSlashMenu && (
         <SlashCommandMenu
           query={value}
@@ -299,7 +313,7 @@ export const Composer = forwardRef<
           disabled={!streaming && !canSend}
           aria-label={streaming ? "Stop the reply" : "Send message"}
           data-streaming={streaming || undefined}
-          className="group/send grid h-8 shrink-0 place-items-center overflow-hidden rounded-lg border border-transparent bg-nimbus-accent px-3 text-[13px] font-medium text-white shadow-[var(--nimbus-glow)] transition-[background-color,border-color,color,box-shadow,scale] duration-300 ease-[var(--nimbus-ease)] hover:bg-nimbus-accent-hover hover:shadow-[0_10px_26px_-8px_rgba(19,95,235,0.9)] active:bg-nimbus-accent-press motion-safe:active:scale-[0.94] motion-safe:active:duration-100 disabled:bg-nimbus-surface-3 disabled:text-nimbus-text-faint disabled:shadow-none data-[streaming]:border-nimbus-border-strong data-[streaming]:bg-nimbus-surface-2 data-[streaming]:text-nimbus-text data-[streaming]:shadow-none data-[streaming]:hover:bg-nimbus-surface-3"
+          className="aro-gel group/send grid h-8 shrink-0 place-items-center overflow-hidden rounded-[10px] border border-transparent bg-nimbus-accent px-3 text-[13px] font-medium text-white transition-[background-color,border-color,color,box-shadow,scale,filter] duration-300 ease-[var(--nimbus-ease)] motion-safe:active:scale-[0.94] motion-safe:active:duration-100 disabled:bg-nimbus-surface-3 disabled:text-nimbus-text-faint data-[streaming]:border-nimbus-border-strong data-[streaming]:bg-nimbus-surface-2 data-[streaming]:bg-none data-[streaming]:text-nimbus-text data-[streaming]:shadow-none data-[streaming]:hover:bg-nimbus-surface-3"
         >
           <span
             ref={sendLayerRef}

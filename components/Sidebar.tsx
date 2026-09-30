@@ -412,8 +412,10 @@ function NavItem({
   trailing?: ReactNode;
   title?: string;
 }) {
-  const className = `group/nav relative flex h-8 items-center gap-2.5 rounded-lg px-[9px] text-[13.5px] transition-colors duration-200 ${
-    active ? "bg-nimbus-surface-2 text-nimbus-text" : "text-nimbus-text-muted hover:bg-nimbus-surface hover:text-nimbus-text"
+  const className = `group/nav relative flex h-8 items-center gap-2.5 rounded-lg px-[9px] text-[13.5px] transition-[background-color,color,scale] duration-200 ease-[var(--nimbus-ease)] motion-safe:active:scale-[0.98] ${
+    active
+      ? "bg-nimbus-accent-soft text-nimbus-text [&>svg]:text-nimbus-accent-text"
+      : "text-nimbus-text-muted hover:bg-nimbus-surface hover:text-nimbus-text"
   }`;
   const content = (
     <>
@@ -511,9 +513,9 @@ function HistoryRow({
             setRenaming(true);
           }}
           aria-current={active ? "page" : undefined}
-          className={`flex h-8 w-full items-center gap-2 rounded-lg pl-2 pr-8 text-left text-[13px] transition-colors duration-200 ${
+          className={`flex h-8 w-full items-center gap-2 rounded-lg pl-2 pr-8 text-left text-[13px] transition-[background-color,color,scale] duration-200 ease-[var(--nimbus-ease)] motion-safe:active:scale-[0.985] ${
             active
-              ? "bg-nimbus-surface-2 text-nimbus-text"
+              ? "bg-nimbus-accent-soft text-nimbus-text"
               : "text-nimbus-text-muted hover:bg-nimbus-surface hover:text-nimbus-text"
           }`}
         >

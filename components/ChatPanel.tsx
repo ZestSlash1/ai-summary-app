@@ -428,6 +428,7 @@ export function ChatPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const flipState = useRef<ReturnType<typeof Flip.getState> | null>(null);
@@ -753,6 +754,19 @@ export function ChatPanel({
     return () => observer.disconnect();
   }, [isEmpty]);
 
+  // The composer floats over the conversation as glass. Its height becomes --dock-h, which
+  // pulls the dock up over the list and pads the list so the last message clears it.
+  useLayoutEffect(() => {
+    const dock = dockRef.current;
+    const container = containerRef.current;
+    if (!dock || !container) return;
+    const measure = () => container.style.setProperty("--dock-h", `${dock.offsetHeight}px`);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(dock);
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     if (awaitingReply && scrollRef.current) {
       scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: reducedMotion() ? "auto" : "smooth" });
@@ -896,6 +910,11 @@ export function ChatPanel({
       className="relative isolate flex h-full min-h-0 flex-row overflow-hidden"
     >
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* The welcome screen's light: an aurora under the particles, gone once the chat starts. */}
+        <div
+          aria-hidden
+          className={`aro-aurora -z-10 inset-x-[-15%] top-[8%] h-[80%] transition-opacity duration-700 ${isEmpty ? "opacity-100" : "opacity-0"}`}
+        />
         {/* Ambient particles behind the welcome screen; fades away once the chat starts. */}
         <AroField active={isEmpty && active} scopeRef={containerRef} />
 
@@ -957,7 +976,11 @@ export function ChatPanel({
         {isEmpty ? (
           <WelcomeHero firstName={firstName} />
         ) : (
-          <div ref={listRef} className="mx-auto flex w-full max-w-[740px] flex-col gap-8 px-4 pb-10 pt-8 sm:px-6">
+          <div
+            ref={listRef}
+            style={{ paddingBottom: "calc(var(--dock-h, 0px) + 2rem)" }}
+            className="mx-auto flex w-full max-w-[740px] flex-col gap-8 px-4 pt-8 sm:px-6"
+          >
             {messages.map((message) => {
               if (message.role === "system") {
                 const text = textOf(message);
@@ -990,7 +1013,7 @@ export function ChatPanel({
                       />
                     ))}
                     {text && (
-                      <div className="max-w-full whitespace-pre-wrap break-words rounded-[18px] rounded-br-[6px] bg-nimbus-surface-2 px-4 py-2.5 text-[14.5px] leading-relaxed text-nimbus-text">
+                      <div className="max-w-full whitespace-pre-wrap break-words rounded-[18px] rounded-br-[6px] border border-[color-mix(in_oklab,var(--nimbus-accent)_26%,transparent)] bg-[color-mix(in_oklab,var(--nimbus-accent)_15%,var(--nimbus-panel))] px-4 py-2.5 text-[14.5px] leading-relaxed text-nimbus-text shadow-[var(--nimbus-inset-highlight)]">
                         {text}
                       </div>
                     )}
@@ -1119,17 +1142,24 @@ export function ChatPanel({
         )}
       </div>
 
-      <div className="relative shrink-0 px-3 pb-3 sm:px-5 sm:pb-4">
+      <div
+        ref={dockRef}
+        style={isEmpty ? undefined : { marginTop: "calc(var(--dock-h, 0px) * -1)" }}
+        className="pointer-events-none relative z-10 shrink-0 px-3 pb-3 sm:px-5 sm:pb-4"
+      >
         {!isEmpty && (
           <>
-            <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-10 h-10 bg-gradient-to-t from-nimbus-panel to-transparent" />
+            {/* Under the glass: the conversation fades into the panel toward the bottom edge, and
+                a faint aurora gives the composer's glass some light to carry. */}
+            <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-[62%] bg-gradient-to-t from-nimbus-panel via-nimbus-panel/85 to-transparent" />
+            <div aria-hidden className="aro-aurora -z-10 inset-x-[18%] bottom-[8%] h-[70%] opacity-60" />
             <button
               type="button"
               onClick={jumpToLatest}
               aria-label="Jump to the latest message"
               tabIndex={showJump ? 0 : -1}
-              className={`absolute -top-12 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-nimbus-border-strong bg-nimbus-surface text-nimbus-text-muted shadow-[var(--nimbus-shadow)] transition-[opacity,transform,color] duration-300 ease-[var(--nimbus-ease)] hover:text-nimbus-text ${
-                showJump ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"
+              className={`aro-glass absolute -top-12 left-1/2 z-10 flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border text-nimbus-text-muted transition-[opacity,translate,color,scale] duration-300 ease-[var(--nimbus-ease)] hover:text-nimbus-text motion-safe:active:scale-90 ${
+                showJump ? "pointer-events-auto translate-y-0 opacity-100" : "translate-y-2 opacity-0"
               }`}
             >
               <ArrowDown aria-hidden className="h-4 w-4" />
@@ -1137,7 +1167,8 @@ export function ChatPanel({
           </>
         )}
 
-        <div className="mx-auto flex w-full max-w-[740px] flex-col gap-2.5 sm:px-1">
+        {/* The dock lets clicks and scrolling through to the conversation beside the composer. */}
+        <div className="pointer-events-auto mx-auto flex w-full max-w-[740px] flex-col gap-2.5 sm:px-1">
           {active && lastUserText && !isStreaming && (
             <SkillPrompt
               latestUserText={lastUserText}

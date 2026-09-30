@@ -248,10 +248,17 @@ export function ModelSwitcher({
             : "flex h-10 w-full min-w-60 items-center gap-2 rounded-lg border border-nimbus-border bg-nimbus-surface px-3 text-[13px] text-nimbus-text transition-colors hover:border-nimbus-border-strong sm:w-auto"
         }
       >
-        <ChipIcon aria-hidden className="h-3.5 w-3.5 shrink-0" />
+        <ChipIcon
+          aria-hidden
+          className={`h-3.5 w-3.5 shrink-0 ${agent ? "text-nimbus-agent" : local ? "text-nimbus-local" : entry?.free ? "text-nimbus-free" : ""}`}
+        />
         <span className={`truncate ${variant === "chip" ? "max-w-[9rem] @max-[34rem]/controls:max-w-[6.5rem]" : "flex-1 text-left"}`}>{label}</span>
         {local ? (
-          <span className="rounded-[5px] bg-nimbus-accent-soft px-1.5 py-px text-[10.5px] font-medium text-nimbus-accent-text @max-[34rem]/controls:hidden">
+          <span
+            className={`rounded-[5px] px-1.5 py-px text-[10.5px] font-medium @max-[34rem]/controls:hidden ${
+              agent ? "bg-nimbus-agent-soft text-nimbus-agent" : "bg-nimbus-local-soft text-nimbus-local"
+            }`}
+          >
             {agent ? "Agent" : "Local"}
           </span>
         ) : entry?.free ? (
@@ -344,7 +351,9 @@ export function ModelSwitcher({
                     >
                       <span className="min-w-0 flex-1 truncate">{row.model.name}</span>
                       {row.kind === "local" && (
-                        <span className="text-[11px] text-nimbus-accent-text">{row.source === "hermes" ? "Agent" : "Local"}</span>
+                        <span className={`text-[11px] ${row.source === "hermes" ? "text-nimbus-agent" : "text-nimbus-local"}`}>
+                          {row.source === "hermes" ? "Agent" : "Local"}
+                        </span>
                       )}
                       {row.kind === "free" && <span className="text-[11px] text-nimbus-free">Free</span>}
                       <Check

@@ -113,7 +113,7 @@ export function WelcomeBanner({
       type="button"
       data-welcome="banner"
       onClick={content.onClick}
-      className="group/banner mx-auto flex max-w-[calc(100%-2rem)] items-center gap-2.5 rounded-[10px] border border-nimbus-border bg-nimbus-surface/70 py-1.5 pl-2.5 pr-2 text-[12.5px] text-nimbus-text-muted transition-[background-color,border-color] duration-300 hover:border-nimbus-border-strong hover:bg-nimbus-surface"
+      className="aro-glass group/banner relative mx-auto flex max-w-[calc(100%-2rem)] items-center gap-2.5 rounded-full border py-1.5 pl-3 pr-2.5 text-[12.5px] text-nimbus-text-muted transition-[border-color,scale] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-border-strong motion-safe:active:scale-[0.97]"
     >
       <GithubMark className="h-3.5 w-3.5 shrink-0 text-nimbus-text" />
       <span className="truncate">
@@ -135,9 +135,9 @@ export function WelcomeHero({ firstName }: { firstName?: string }) {
         <div
           aria-hidden
           data-welcome="glow"
-          className="pointer-events-none absolute -inset-16 rounded-full bg-[radial-gradient(closest-side,var(--nimbus-accent-soft),transparent)]"
+          className="pointer-events-none absolute -inset-16 rounded-full bg-[radial-gradient(closest-side,var(--aro-glow-2),var(--aro-glow-1)_45%,transparent)]"
         />
-        <BrandMark className="relative h-12 w-12 text-nimbus-text-muted" strokeWidth={2.2} />
+        <BrandMark aurora className="relative h-12 w-12 text-nimbus-text-muted" strokeWidth={2.2} />
       </div>
       <h1
         data-welcome="title"
@@ -169,7 +169,7 @@ export function WelcomeSuggestions({
   onContinue: (id: string) => void;
 }) {
   const chip =
-    "group/chip flex items-center gap-2 rounded-[10px] border border-nimbus-border bg-nimbus-surface/50 px-3 py-2 text-[13px] text-nimbus-text-muted transition-[background-color,border-color,color] duration-300 hover:border-nimbus-border-strong hover:bg-nimbus-surface hover:text-nimbus-text";
+    "aro-glass group/chip relative flex items-center gap-2 rounded-full border px-3.5 py-2 text-[13px] text-nimbus-text-muted transition-[border-color,color,scale] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-border-strong hover:text-nimbus-text motion-safe:active:scale-[0.97]";
   const icon =
     "h-3.5 w-3.5 shrink-0 transition-transform duration-500 ease-[var(--nimbus-ease)] group-hover/chip:-rotate-12 group-hover/chip:scale-110";
 

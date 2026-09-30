@@ -117,7 +117,7 @@ function ToastCard({
     <div
       ref={ref}
       role={tone === "error" ? "alert" : "status"}
-      className="nimbus-glass pointer-events-auto flex w-full max-w-sm items-start gap-3 overflow-hidden rounded-[14px] border border-nimbus-border-strong bg-nimbus-surface/95 px-3.5 py-3 text-sm shadow-[var(--nimbus-shadow-lift)]"
+      className="aro-glass aro-glass-thick pointer-events-auto relative flex w-full max-w-sm items-start gap-3 overflow-hidden rounded-[16px] border px-3.5 py-3 text-sm"
     >
       <span className="mt-0.5 shrink-0">{TONE_ICON[tone]}</span>
       <div className="min-w-0 flex-1">

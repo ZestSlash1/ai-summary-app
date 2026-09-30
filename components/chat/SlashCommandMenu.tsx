@@ -122,9 +122,9 @@ export function SlashCommandMenu({
       ref={containerRef}
       role="listbox"
       aria-label="Slash commands"
-      className="absolute bottom-full left-0 mb-2 w-72 overflow-hidden rounded-xl border border-nimbus-border bg-nimbus-surface p-1.5 shadow-[var(--nimbus-shadow-elevated)] backdrop-blur-md z-40"
+      className="aro-glass aro-glass-thick nimbus-fade-in absolute bottom-full left-0 z-40 mb-2 w-72 overflow-hidden rounded-[14px] border p-1.5"
     >
-      <div className="px-2 py-1 text-[11px] font-medium text-nimbus-text-faint uppercase tracking-wider">
+      <div className="px-2 py-1 text-[11.5px] font-medium text-nimbus-text-faint">
         Commands
       </div>
       <div className="flex flex-col gap-0.5">

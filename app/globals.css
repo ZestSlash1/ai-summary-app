@@ -52,6 +52,43 @@
   --nimbus-danger: light-dark(#c42b2b, #ff7d7d);
   --nimbus-danger-soft: light-dark(rgba(196, 43, 43, 0.08), rgba(255, 125, 125, 0.12));
 
+  /* Where a model runs. Violet: on your own PC (Bonsai). Amber: the Hermes agent, which acts
+     on your machine, so it reads as a caution. Free keeps the green; paid stays neutral. */
+  --nimbus-local: light-dark(#6a3fd4, #b9a3ff);
+  --nimbus-local-soft: light-dark(rgba(106, 63, 212, 0.1), rgba(185, 163, 255, 0.14));
+  --nimbus-agent: light-dark(#a24b06, #ffb46e);
+  --nimbus-agent-soft: light-dark(rgba(162, 75, 6, 0.1), rgba(255, 180, 110, 0.13));
+
+  /* Aurora, the brand's light: the accent blue with violet and cyan. Only ever light behind
+     glass or around the mark, never a fill under text. */
+  --aro-aurora-1: #135feb;
+  --aro-aurora-2: #7c4dff;
+  --aro-aurora-3: #1fb8d6;
+  /* The same three as light fields, fainter on the light theme where they would wash out text. */
+  --aro-glow-1: light-dark(rgba(19, 95, 235, 0.13), rgba(19, 95, 235, 0.3));
+  --aro-glow-2: light-dark(rgba(124, 77, 255, 0.11), rgba(124, 77, 255, 0.24));
+  --aro-glow-3: light-dark(rgba(31, 184, 214, 0.1), rgba(31, 184, 214, 0.18));
+  /* The primary action as gel: the accent, lit from the top left, deepening to indigo. */
+  --aro-gel: linear-gradient(135deg, #3d7df6 0%, #135feb 46%, #4338ca 100%);
+  --aro-gel-hover: linear-gradient(135deg, #5590f8 0%, #2b6ff0 46%, #4f46e5 100%);
+
+  /* Liquid glass, for the controls layer that floats over content: composer, menus, sheets,
+     toasts. A translucent fill, a frosted backdrop, a lit rim, and a sheen from the top left. */
+  --glass-fill: light-dark(rgba(255, 255, 255, 0.6), rgba(30, 30, 35, 0.52));
+  --glass-fill-thick: light-dark(rgba(255, 255, 255, 0.8), rgba(24, 24, 28, 0.76));
+  --glass-edge: light-dark(rgba(12, 12, 24, 0.1), rgba(255, 255, 255, 0.1));
+  --glass-rim: inset 0 1px 0 light-dark(rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.16)),
+    inset 0 -1px 0 light-dark(rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.04)),
+    inset 1px 0 0 light-dark(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.05)),
+    inset -1px 0 0 light-dark(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.05));
+  --glass-shadow: 0 1px 2px var(--nimbus-shadow-soft), 0 14px 44px -12px var(--nimbus-shadow-color);
+  --glass-sheen: linear-gradient(
+    135deg,
+    light-dark(rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.085)) 0%,
+    transparent 42%
+  );
+  --glass-blur: blur(20px) saturate(1.8);
+
   --nimbus-radius-card: 14px;
   --nimbus-radius-pill: 999px;
   --nimbus-shadow-color: light-dark(rgba(16, 16, 28, 0.08), rgba(0, 0, 0, 0.5));
@@ -121,6 +158,13 @@
   --color-nimbus-warn: var(--nimbus-warn);
   --color-nimbus-danger: var(--nimbus-danger);
   --color-nimbus-danger-soft: var(--nimbus-danger-soft);
+  --color-nimbus-local: var(--nimbus-local);
+  --color-nimbus-local-soft: var(--nimbus-local-soft);
+  --color-nimbus-agent: var(--nimbus-agent);
+  --color-nimbus-agent-soft: var(--nimbus-agent-soft);
+  --color-aro-aurora-1: var(--aro-aurora-1);
+  --color-aro-aurora-2: var(--aro-aurora-2);
+  --color-aro-aurora-3: var(--aro-aurora-3);
   --font-sans: var(--font-geist);
   --font-heading: var(--font-geist);
   --font-mono: var(--font-geist-mono);
@@ -357,6 +401,110 @@ body {
   animation: aro-flash 1.4s var(--nimbus-ease) both;
 }
 
+@layer components {
+  /* Liquid glass. The element must be positioned (relative, absolute, or fixed): the sheen is
+     an absolute layer inside it. Utilities still win, so a component can tune any part. */
+  .aro-glass {
+    isolation: isolate;
+    background-color: var(--glass-fill);
+    border-color: var(--glass-edge);
+    box-shadow: var(--glass-rim), var(--glass-shadow);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+  .aro-glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--glass-sheen);
+    pointer-events: none;
+  }
+  /* For menus, sheets, and toasts, which hold dense text: more fill, same material. */
+  .aro-glass-thick {
+    background-color: var(--glass-fill-thick);
+  }
+
+  /* The primary action as gel. */
+  .aro-gel {
+    background-image: var(--aro-gel);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -1px 0 rgba(0, 0, 0, 0.18), var(--nimbus-glow);
+  }
+  .aro-gel:hover:not(:disabled) {
+    background-image: var(--aro-gel-hover);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+      0 10px 26px -8px rgba(19, 95, 235, 0.9);
+  }
+  .aro-gel:active:not(:disabled) {
+    filter: brightness(0.9);
+  }
+  .aro-gel:disabled {
+    background-image: none;
+    box-shadow: none;
+  }
+}
+
+/* A light that runs along an element's border while ARO works: the ring is the element's
+   border box with its padding box masked out, and the light rides the rim on offset-path.
+   After Magic UI's Border Beam, rebuilt on CSS alone. */
+.aro-beam {
+  pointer-events: none;
+  position: absolute;
+  inset: -1px;
+  border: 1.5px solid transparent;
+  border-radius: inherit;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0);
+  opacity: 0;
+  transition: opacity 0.5s var(--nimbus-ease);
+}
+.aro-beam[data-on] {
+  opacity: 1;
+}
+.aro-beam > span {
+  position: absolute;
+  width: var(--beam-size, 140px);
+  aspect-ratio: 1;
+  background: radial-gradient(closest-side, var(--beam-color, var(--aro-aurora-2)), transparent);
+  offset-path: rect(0 auto auto 0 round var(--beam-radius, 16px));
+  offset-anchor: 50% 50%;
+  animation: aro-beam var(--beam-duration, 3.2s) linear infinite;
+}
+.aro-beam > span + span {
+  --beam-color: var(--aro-aurora-3);
+  animation-delay: calc(var(--beam-duration, 3.2s) / -2);
+}
+@keyframes aro-beam {
+  to {
+    offset-distance: 100%;
+  }
+}
+
+/* Aurora: soft color fields that give the glass something to bend, drifting slowly. */
+.aro-aurora {
+  pointer-events: none;
+  position: absolute;
+  background:
+    radial-gradient(closest-side, var(--aro-glow-1), transparent) 18% 60% / 55% 70% no-repeat,
+    radial-gradient(closest-side, var(--aro-glow-2), transparent) 62% 40% / 50% 65% no-repeat,
+    radial-gradient(closest-side, var(--aro-glow-3), transparent) 86% 72% / 45% 60% no-repeat;
+  animation: aro-aurora 22s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes aro-aurora {
+  0% {
+    transform: translate3d(-3%, 2%, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2%, -2%, 0) scale(1.06);
+  }
+  100% {
+    transform: translate3d(4%, 1%, 0) scale(0.97);
+  }
+}
+
 /* ---------- Assistant prose (markdown) ---------- */
 .aro-prose {
   color: var(--nimbus-text-soft);
@@ -524,9 +672,30 @@ body {
   .aro-pop-in {
     animation: nimbus-fade-in 0.15s ease-out both;
   }
+  /* The beam holds still as a lit corner; the aurora stops drifting. */
+  .aro-beam > span {
+    animation: none;
+    offset-distance: 12%;
+  }
+  .aro-beam > span + span {
+    offset-distance: 62%;
+  }
+  .aro-aurora {
+    animation: none;
+  }
   .aro-shimmer {
     color: var(--nimbus-text-muted);
     -webkit-text-fill-color: currentColor;
     background: none;
+  }
+}
+
+/* Asked for less transparency: glass becomes a solid surface with the same rim. */
+@media (prefers-reduced-transparency: reduce) {
+  .aro-glass,
+  .aro-glass-thick {
+    background-color: var(--nimbus-surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
