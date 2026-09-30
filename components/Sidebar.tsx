@@ -24,7 +24,7 @@ import { useHomeGpu, bonsaiState, type GpuState } from "@/lib/useHomeGpu";
 import { AccountMenu } from "./AccountMenu";
 import { BrandTile } from "./BrandMark";
 import { ThemeToggleIcon } from "./ThemeToggleIcon";
-import { PopoverPanel, usePopoverDismiss } from "./Popover";
+import { PopoverPanel } from "./Popover";
 import { MENU_ROW } from "./ui/classes";
 
 const EXPANDED_W = 248;
@@ -303,7 +303,7 @@ export function Sidebar({
                   onKeyDown={(e) => e.key === "Escape" && closeSearch()}
                   placeholder="Filter chats"
                   aria-label="Filter chats"
-                  className="aro-bare-focus h-7 w-full rounded-md border border-nimbus-border bg-nimbus-surface px-2 text-[12.5px] text-nimbus-text placeholder:text-nimbus-text-faint focus:border-nimbus-accent/60 focus:outline-none"
+                  className="aro-bare-focus h-7 w-full rounded-md border border-nimbus-border bg-nimbus-surface px-2 text-[16px] md:text-[12.5px] text-nimbus-text placeholder:text-nimbus-text-faint focus:border-nimbus-accent/60 focus:outline-none"
                 />
               </div>
             ) : (
@@ -460,13 +460,13 @@ function HistoryRow({
   const [confirming, setConfirming] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(conversation.title);
-  const rootRef = useRef<HTMLLIElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  usePopoverDismiss(menuOpen, () => {
+  function closeMenu() {
     setMenuOpen(false);
     setConfirming(false);
-  }, rootRef);
+  }
 
   useEffect(() => {
     if (renaming) inputRef.current?.select();
@@ -479,7 +479,7 @@ function HistoryRow({
   }
 
   return (
-    <li ref={rootRef} data-chat-row={conversation.id} className="group/row relative">
+    <li data-chat-row={conversation.id} className="group/row relative">
       {renaming ? (
         <input
           ref={inputRef}
@@ -494,7 +494,7 @@ function HistoryRow({
             }
           }}
           aria-label="Chat title"
-          className="aro-bare-focus h-8 w-full rounded-lg border border-nimbus-accent/60 bg-nimbus-surface px-2 text-[13px] text-nimbus-text focus:outline-none"
+          className="aro-bare-focus h-8 w-full rounded-lg border border-nimbus-accent/60 bg-nimbus-surface px-2 text-[16px] text-nimbus-text focus:outline-none md:text-[13px]"
         />
       ) : (
         <button
@@ -519,8 +519,9 @@ function HistoryRow({
       )}
       {!renaming && (
         <button
+          ref={menuButtonRef}
           type="button"
-          onClick={() => setMenuOpen((v) => !v)}
+          onClick={() => (menuOpen ? closeMenu() : setMenuOpen(true))}
           aria-label={`More for ${conversation.title}`}
           aria-expanded={menuOpen}
           className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md text-nimbus-text-muted opacity-0 transition-[opacity,background-color] hover:bg-nimbus-surface-3 hover:text-nimbus-text focus-visible:opacity-100 group-hover/row:opacity-100 aria-expanded:opacity-100 max-md:opacity-100"
@@ -528,12 +529,19 @@ function HistoryRow({
           <Ellipsis aria-hidden className="h-3.5 w-3.5" />
         </button>
       )}
-      {menuOpen && (
-        <PopoverPanel open origin="top right" className="right-0 top-full z-50 mt-1 w-44 p-1">
+      <PopoverPanel
+        open={menuOpen}
+        onClose={closeMenu}
+        anchorRef={menuButtonRef}
+        placement="bottom-end"
+        width={184}
+        label={`Actions for ${conversation.title}`}
+        className="p-1"
+      >
           <button
             type="button"
             onClick={() => {
-              setMenuOpen(false);
+              closeMenu();
               setDraft(conversation.title);
               setRenaming(true);
             }}
@@ -546,16 +554,15 @@ function HistoryRow({
             type="button"
             onClick={() => {
               if (!confirming) return setConfirming(true);
-              setMenuOpen(false);
+              closeMenu();
               onDelete();
             }}
             className={`${MENU_ROW} ${confirming ? "bg-nimbus-danger-soft text-nimbus-danger hover:bg-nimbus-danger-soft" : "text-nimbus-danger"}`}
           >
             <Trash2 aria-hidden className="h-3.5 w-3.5" />
-            {confirming ? "Click again to delete" : "Delete"}
+            {confirming ? "Tap again to delete" : "Delete"}
           </button>
-        </PopoverPanel>
-      )}
+      </PopoverPanel>
     </li>
   );
 }

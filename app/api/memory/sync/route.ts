@@ -1,12 +1,15 @@
 import { auth } from "@/auth";
 import { listRepoTextFiles } from "@/lib/github";
 import { ingestFiles } from "@/lib/memory";
+import { isSupabaseConfigured, supabaseMissing } from "@/lib/supabase";
 
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.githubAccessToken || !session.githubUserId) {
     return Response.json({ error: "Not signed in with GitHub." }, { status: 401 });
   }
+
+  if (!isSupabaseConfigured()) return supabaseMissing();
 
   const { owner, repo, branch } = (await request.json()) as {
     owner?: string;

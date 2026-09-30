@@ -1,24 +1,44 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Cpu, Search, Sparkles } from "lucide-react";
+import { Check, ChevronDown, Cpu, Lock, Search, Sparkles } from "lucide-react";
 import type { ModelOption } from "@/lib/types";
-import { MODEL_SOURCE_EVENT, loadModelSource, saveModelSource, type ModelSource } from "@/lib/storage";
-import { fetchDefaultModelForSource, fetchModelCatalog } from "@/lib/models";
-import { useHomeGpu } from "@/lib/useHomeGpu";
-import { PopoverPanel, usePopoverDismiss } from "./Popover";
+import { loadModelSource, type ModelSource } from "@/lib/storage";
+import { fetchModelCatalog } from "@/lib/models";
+import { SOURCE_INFO, isQualifiedRef, parseModelRef, toModelRef } from "@/lib/modelRef";
+import { bonsaiState, useHomeGpu, type GpuState } from "@/lib/useHomeGpu";
+import { PopoverPanel } from "./Popover";
+import { BonsaiAccessNote } from "./GpuStatus";
 import { Segmented } from "./ui/Segmented";
-import { CHIP, FIELD, MENU_ROW } from "./ui/classes";
+import { CHIP, FIELD } from "./ui/classes";
 
-const SOURCE_LABEL: Record<ModelSource, string> = {
-  gateway: "AI Gateway",
-  omniroute: "OmniRoute",
-  bonsai: "Bonsai",
+type Catalog = { models: ModelOption[]; failed: boolean };
+type Kind = "local" | "free" | "paid";
+type Row = { ref: string; source: ModelSource; model: ModelOption; kind: Kind };
+type Group = { key: string; kind: Kind; title: string; note: string; rows: Row[]; locked?: boolean; state?: GpuState };
+type Filter = "all" | Kind;
+
+const BONSAI_NOTE: Record<GpuState, string> = {
+  online: "Ready. Private and free: nothing leaves your network except through your tunnel.",
+  sleeping: "Asleep. Wakes on your next message; the first reply takes about 15 seconds longer.",
+  busy: "Busy with another reply or an image edit. Messages wait their turn.",
+  offline: "Not answering. Turn the home PC on and start the stack.",
+};
+const STATE_DOT: Record<GpuState, string> = {
+  online: "bg-nimbus-free",
+  sleeping: "bg-nimbus-text-faint",
+  busy: "bg-nimbus-warn",
+  offline: "bg-nimbus-danger",
 };
 
+function pickDefault(models: ModelOption[]): ModelOption {
+  return models.find((m) => m.free) ?? models[0];
+}
+
 /**
- * The model picker. The source (AI Gateway, OmniRoute, or Bonsai on the home PC) is
- * switchable right here, so changing where models come from never needs a trip to Settings.
+ * The model picker. One grouped list across every source you can use: models on your own
+ * PC, free cloud models (and where they are free), and paid ones. Picking a model picks its
+ * source, stored with the chat, so a chat can never show one source and send to another.
  */
 export function ModelSwitcher({
   value,
@@ -26,96 +46,180 @@ export function ModelSwitcher({
   placement = "up",
   variant = "chip",
 }: {
+  /** A "source::id" ref. Bare ids from older chats read with the old app-wide source. */
   value: string;
-  onChange: (modelId: string) => void;
+  onChange: (modelRef: string) => void;
   placement?: "up" | "down";
   variant?: "chip" | "field";
 }) {
-  const [source, setSource] = useState<ModelSource>("gateway");
-  const [models, setModels] = useState<ModelOption[] | null>(null);
-  const [failed, setFailed] = useState(false);
+  const { allowed: homeAllowed, status: gpu } = useHomeGpu({ pollMs: 30_000 });
+  const [legacySource, setLegacySource] = useState<ModelSource | null>(null);
+  const [catalogs, setCatalogs] = useState<Partial<Record<ModelSource, Catalog>>>({});
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState("");
-  const rootRef = useRef<HTMLDivElement>(null);
-  const filterRef = useRef<HTMLInputElement>(null);
-  const { allowed: bonsaiAllowed } = useHomeGpu();
-
-  // The source is a global setting: follow it when it changes anywhere in the app.
+  const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
+  const [lockedNote, setLockedNote] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const onChangeRef = useRef(onChange);
   useEffect(() => {
+    onChangeRef.current = onChange;
+  });
+
+  useEffect(() => {
+    // Old chats store a bare id; the app-wide source they were made with lives in storage.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSource(loadModelSource());
-    const onSource = (e: Event) => setSource((e as CustomEvent<ModelSource>).detail);
-    window.addEventListener(MODEL_SOURCE_EVENT, onSource);
-    return () => window.removeEventListener(MODEL_SOURCE_EVENT, onSource);
+    setLegacySource(loadModelSource());
   }, []);
+
+  const qualified = isQualifiedRef(value);
+  const current = parseModelRef(value, legacySource ?? "gateway");
+  const bonsaiNow = gpu ? bonsaiState(gpu) : null;
+
+  const sources = useMemo<ModelSource[]>(
+    () => (homeAllowed ? ["bonsai", "gateway", "omniroute"] : ["gateway", "omniroute"]),
+    [homeAllowed]
+  );
 
   useEffect(() => {
     let cancelled = false;
-    fetchModelCatalog(source, open)
-      .then((data) => {
-        if (cancelled) return;
-        setModels(data);
-        setFailed(false);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setModels([]);
-        setFailed(true);
-      });
+    for (const source of sources) {
+      fetchModelCatalog(source, open)
+        .then((models) => !cancelled && setCatalogs((prev) => ({ ...prev, [source]: { models, failed: false } })))
+        .catch(() => !cancelled && setCatalogs((prev) => ({ ...prev, [source]: { models: [], failed: true } })));
+    }
     return () => {
       cancelled = true;
     };
-  }, [source, open]);
+  }, [sources, open]);
+
+  // Keep the chat's model real: inside its source's catalog, on a source this account can
+  // use, and stored with its source so it never depends on the old app-wide setting.
+  useEffect(() => {
+    if (!qualified && legacySource === null) return;
+    if (current.source === "bonsai" && homeAllowed === false) {
+      const gateway = catalogs.gateway?.models;
+      if (gateway?.length) onChangeRef.current(toModelRef("gateway", pickDefault(gateway).id));
+      return;
+    }
+    const catalog = catalogs[current.source];
+    if (!catalog || catalog.models.length === 0) return; // unknown yet, or the PC is off: keep the choice
+    if (catalog.models.some((m) => m.id === current.id)) {
+      if (!qualified) onChangeRef.current(toModelRef(current.source, current.id));
+      return;
+    }
+    onChangeRef.current(toModelRef(current.source, pickDefault(catalog.models).id));
+  }, [catalogs, qualified, legacySource, current.source, current.id, homeAllowed]);
 
   useEffect(() => {
-    if (open) window.setTimeout(() => filterRef.current?.focus(), 60);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    else setFilter("");
+    if (!open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setQuery("");
+      setLockedNote(false);
+      return;
+    }
+    if (window.matchMedia("(pointer: fine)").matches) window.setTimeout(() => searchRef.current?.focus(), 60);
   }, [open]);
 
-  usePopoverDismiss(open, () => setOpen(false), rootRef);
+  const groups = useMemo<Group[]>(() => {
+    const out: Group[] = [];
+    const rows = (source: ModelSource, kind: Kind, list: ModelOption[]) =>
+      list.map((model) => ({ ref: toModelRef(source, model.id), source, model, kind }));
 
-  const current = models?.find((m) => m.id === value);
-  const label = current?.name ?? value.split("/").pop() ?? value;
+    if (homeAllowed === false) {
+      out.push({ key: "local", kind: "local", title: "On your PC", note: "Bonsai runs on the owner's home PC.", rows: [], locked: true });
+    } else if (catalogs.bonsai) {
+      const state = bonsaiNow ?? (catalogs.bonsai.failed ? "offline" : undefined);
+      out.push({
+        key: "local",
+        kind: "local",
+        title: "On your PC · Bonsai",
+        note: state ? BONSAI_NOTE[state] : "Runs on your home PC. Private and free.",
+        rows: rows("bonsai", "local", catalogs.bonsai.models),
+        state,
+      });
+    }
+    const gateway = catalogs.gateway?.models ?? [];
+    const omni = catalogs.omniroute?.models ?? [];
+    out.push(
+      {
+        key: "free-gateway",
+        kind: "free",
+        title: "Free on AI Gateway",
+        note: "No token charges on your AI Gateway account. Rate limits apply.",
+        rows: rows("gateway", "free", gateway.filter((m) => m.free)),
+      },
+      {
+        key: "free-omni",
+        kind: "free",
+        title: "Free on OmniRoute",
+        note: "Free tiers routed through your OmniRoute server.",
+        rows: rows("omniroute", "free", omni.filter((m) => m.free)),
+      },
+      {
+        key: "paid-gateway",
+        kind: "paid",
+        title: "AI Gateway · paid per token",
+        note: "Billed to your AI Gateway credits for every message.",
+        rows: rows("gateway", "paid", gateway.filter((m) => !m.free)),
+      },
+      {
+        key: "paid-omni",
+        kind: "paid",
+        title: "OmniRoute · your providers",
+        note: "Uses the accounts connected to your OmniRoute server.",
+        rows: rows("omniroute", "paid", omni.filter((m) => !m.free)),
+      }
+    );
+    return out;
+  }, [catalogs, homeAllowed, bonsaiNow]);
 
-  const filtered = useMemo(() => {
-    if (!models) return null;
-    const q = filter.trim().toLowerCase();
-    if (!q) return models;
-    return models.filter((m) => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q));
-  }, [models, filter]);
+  const visibleGroups = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return groups
+      .filter((g) => filter === "all" || g.kind === filter)
+      .map((g) => ({
+        ...g,
+        rows: q ? g.rows.filter((r) => r.model.name.toLowerCase().includes(q) || r.model.id.toLowerCase().includes(q)) : g.rows,
+      }))
+      .filter((g) => g.rows.length > 0 || (!q && (g.locked || (g.kind === "local" && g.state))));
+  }, [groups, filter, query]);
 
-  async function changeSource(next: ModelSource) {
-    if (next === source) return;
-    setSource(next);
-    setModels(null);
-    saveModelSource(next);
-    onChange(await fetchDefaultModelForSource(next));
-  }
-
-  const sources: ModelSource[] = bonsaiAllowed ? ["gateway", "omniroute", "bonsai"] : ["gateway", "omniroute"];
-  const SourceIcon = source === "bonsai" ? Cpu : Sparkles;
+  const entry = catalogs[current.source]?.models.find((m) => m.id === current.id);
+  const local = SOURCE_INFO[current.source].local;
+  // A local model shows its source's name until its catalog answers, never a stale cloud id.
+  const label = entry?.name ?? (local ? SOURCE_INFO[current.source].name : (current.id.split("/").pop() ?? current.id));
+  const loading = sources.some((s) => !catalogs[s]);
+  const gatewayFailed = catalogs.gateway?.failed;
+  const ChipIcon = local ? Cpu : Sparkles;
+  const selectedRef = toModelRef(current.source, current.id);
+  const chipTitle = `${label}: ${local ? "runs on " : entry?.free ? "free on " : "via "}${SOURCE_INFO[current.source].runs}`;
 
   return (
-    <div ref={rootRef} className="relative">
+    <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-haspopup="listbox"
+        aria-haspopup="dialog"
+        aria-label={`Model: ${label}${local ? ", local" : entry?.free ? ", free" : ""}`}
+        title={chipTitle}
         className={
           variant === "chip"
             ? CHIP
-            : "flex h-10 min-w-56 items-center gap-2 rounded-lg border border-nimbus-border bg-nimbus-surface px-3 text-[13px] text-nimbus-text transition-colors hover:border-nimbus-border-strong"
+            : "flex h-10 w-full min-w-60 items-center gap-2 rounded-lg border border-nimbus-border bg-nimbus-surface px-3 text-[13px] text-nimbus-text transition-colors hover:border-nimbus-border-strong sm:w-auto"
         }
       >
-        <SourceIcon aria-hidden className="h-3.5 w-3.5 shrink-0" />
-        <span className={`truncate ${variant === "chip" ? "max-w-[9.5rem]" : "flex-1 text-left"}`}>{label}</span>
-        {current?.free && (
-          <span className="rounded-[5px] bg-nimbus-free-soft px-1.5 py-px text-[10.5px] font-medium text-nimbus-free">
-            Free
+        <ChipIcon aria-hidden className="h-3.5 w-3.5 shrink-0" />
+        <span className={`truncate ${variant === "chip" ? "max-w-[9rem]" : "flex-1 text-left"}`}>{label}</span>
+        {local ? (
+          <span className="rounded-[5px] bg-nimbus-accent-soft px-1.5 py-px text-[10.5px] font-medium text-nimbus-accent-text">
+            Local
           </span>
-        )}
+        ) : entry?.free ? (
+          <span className="rounded-[5px] bg-nimbus-free-soft px-1.5 py-px text-[10.5px] font-medium text-nimbus-free">Free</span>
+        ) : null}
         <ChevronDown
           aria-hidden
           className={`h-3.5 w-3.5 shrink-0 opacity-70 transition-transform duration-300 ${open ? "rotate-180" : ""}`}
@@ -124,69 +228,106 @@ export function ModelSwitcher({
 
       <PopoverPanel
         open={open}
-        origin={placement === "up" ? "bottom left" : "top left"}
-        className={`${placement === "up" ? "bottom-full mb-2" : "top-full mt-2"} left-0 flex w-80 flex-col p-1.5`}
+        onClose={() => setOpen(false)}
+        anchorRef={triggerRef}
+        placement={placement === "up" ? "top-start" : "bottom-start"}
+        width={360}
+        label="Choose a model"
+        className="p-1.5"
       >
         <div className="flex flex-col gap-2 p-1.5 pb-2">
-          <Segmented
-            label="Model source"
-            size="sm"
-            value={source}
-            onChange={changeSource}
-            options={sources.map((s) => ({ value: s, label: SOURCE_LABEL[s] }))}
-          />
           <div className="relative">
             <Search aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-nimbus-text-faint" />
             <input
-              ref={filterRef}
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder={`Search ${SOURCE_LABEL[source]} models`}
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search models"
               aria-label="Search models"
               className={`${FIELD} pl-8`}
             />
           </div>
+          <Segmented
+            label="Show"
+            size="sm"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: "all", label: "All" },
+              { value: "local", label: "Local" },
+              { value: "free", label: "Free" },
+              { value: "paid", label: "Paid" },
+            ]}
+          />
         </div>
-        <div role="listbox" aria-label="Models" className="max-h-72 overflow-y-auto border-t border-nimbus-border pt-1.5">
-          {models === null && (
-            <div className="flex flex-col gap-1.5 p-2.5" aria-label="Loading models">
-              {[0, 1, 2, 3].map((i) => (
-                <span key={i} className="h-4 animate-pulse rounded bg-nimbus-surface-2" style={{ width: `${80 - i * 12}%` }} />
+
+        <div role="listbox" aria-label="Models" className="min-h-0 flex-1 overflow-y-auto border-t border-nimbus-border sm:max-h-[22rem]">
+          {visibleGroups.map((group) => (
+            <section key={group.key} aria-label={group.title} className="pb-1">
+              <div className="sticky top-0 z-10 bg-nimbus-surface px-2.5 pb-1.5 pt-2.5">
+                <p className="flex items-center gap-1.5 text-[12px] font-medium text-nimbus-text">
+                  {group.locked && <Lock aria-hidden className="h-3 w-3 text-nimbus-text-muted" />}
+                  {group.state && <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${STATE_DOT[group.state]}`} />}
+                  {group.title}
+                </p>
+                <p className="mt-0.5 text-[11.5px] leading-snug text-nimbus-text-muted">{group.note}</p>
+              </div>
+              {group.locked ? (
+                lockedNote ? (
+                  <div className="px-1.5 pb-1.5">
+                    <BonsaiAccessNote compact />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setLockedNote(true)}
+                    className="mx-1 flex w-[calc(100%-0.5rem)] items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-nimbus-text-faint transition-colors hover:bg-nimbus-surface-2 hover:text-nimbus-text-muted"
+                  >
+                    <Cpu aria-hidden className="h-3.5 w-3.5" />
+                    <span className="flex-1">Bonsai</span>
+                    <span className="text-[11px]">Why locked?</span>
+                  </button>
+                )
+              ) : (
+                group.rows.map((row) => {
+                  const selected = row.ref === selectedRef;
+                  return (
+                    <button
+                      key={row.ref}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      onClick={() => {
+                        onChange(row.ref);
+                        setOpen(false);
+                      }}
+                      className={`mx-1 flex w-[calc(100%-0.5rem)] items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-nimbus-text transition-colors duration-150 hover:bg-nimbus-surface-2 ${
+                        selected ? "bg-nimbus-surface-2" : ""
+                      }`}
+                    >
+                      <span className="min-w-0 flex-1 truncate">{row.model.name}</span>
+                      {row.kind === "local" && <span className="text-[11px] text-nimbus-accent-text">Local</span>}
+                      {row.kind === "free" && <span className="text-[11px] text-nimbus-free">Free</span>}
+                      <Check aria-hidden className={`h-3.5 w-3.5 shrink-0 text-nimbus-accent-text ${selected ? "" : "invisible"}`} />
+                    </button>
+                  );
+                })
+              )}
+            </section>
+          ))}
+
+          {loading && (
+            <div className="flex flex-col gap-1.5 p-3" aria-label="Loading models">
+              {[0, 1, 2].map((i) => (
+                <span key={i} className="h-4 animate-pulse rounded bg-nimbus-surface-2" style={{ width: `${78 - i * 14}%` }} />
               ))}
             </div>
           )}
-          {models?.length === 0 && (
-            <p className="px-2.5 py-3 text-[13px] leading-relaxed text-nimbus-text-muted">
-              {source === "bonsai"
-                ? "Bonsai is not answering. Check that the home PC is on."
-                : failed
-                  ? `Could not load models from ${SOURCE_LABEL[source]}.`
-                  : "No models available."}
+          {!loading && visibleGroups.length === 0 && (
+            <p className="px-3 py-4 text-[13px] text-nimbus-text-muted">
+              {query ? "No models match." : gatewayFailed ? "Could not load models. Try again in a moment." : "Nothing in this group."}
             </p>
           )}
-          {filtered?.length === 0 && models && models.length > 0 && (
-            <p className="px-2.5 py-3 text-[13px] text-nimbus-text-muted">No models match.</p>
-          )}
-          {filtered?.map((m) => {
-            const selected = m.id === value;
-            return (
-              <button
-                key={m.id}
-                type="button"
-                role="option"
-                aria-selected={selected}
-                onClick={() => {
-                  onChange(m.id);
-                  setOpen(false);
-                }}
-                className={`${MENU_ROW} ${selected ? "bg-nimbus-surface-2" : ""}`}
-              >
-                <span className="min-w-0 flex-1 truncate">{m.name}</span>
-                {m.free && <span className="text-[11px] text-nimbus-free">Free</span>}
-                <Check aria-hidden className={`h-3.5 w-3.5 shrink-0 text-nimbus-accent-text ${selected ? "" : "invisible"}`} />
-              </button>
-            );
-          })}
         </div>
       </PopoverPanel>
     </div>

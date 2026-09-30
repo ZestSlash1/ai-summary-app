@@ -1,15 +1,18 @@
 import { auth } from "@/auth";
-import { supabase } from "@/lib/supabase";
+import { isSupabaseConfigured, supabase, supabaseMissing } from "@/lib/supabase";
 import { getUserSkills } from "@/lib/skillDiscovery";
 
 export async function GET() {
   const session = await auth();
-  if (!session?.githubUserId) {
+  if (!session?.githubUserId || !isSupabaseConfigured()) {
     return Response.json({ approved: [], proposed: [] });
   }
 
-  const skills = await getUserSkills(session.githubUserId);
-  return Response.json(skills);
+  try {
+    return Response.json(await getUserSkills(session.githubUserId));
+  } catch {
+    return Response.json({ approved: [], proposed: [] });
+  }
 }
 
 export async function PATCH(request: Request) {
@@ -17,6 +20,8 @@ export async function PATCH(request: Request) {
   if (!session?.githubUserId) {
     return Response.json({ error: "Not signed in." }, { status: 401 });
   }
+
+  if (!isSupabaseConfigured()) return supabaseMissing();
 
   const { id, status } = (await request.json()) as {
     id?: string;
@@ -43,6 +48,8 @@ export async function DELETE(request: Request) {
   if (!session?.githubUserId) {
     return Response.json({ error: "Not signed in." }, { status: 401 });
   }
+
+  if (!isSupabaseConfigured()) return supabaseMissing();
 
   const { id } = (await request.json()) as { id?: string };
   if (!id) {

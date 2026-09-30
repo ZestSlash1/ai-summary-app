@@ -12,6 +12,19 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  * instead of crashing chat outright. */
 let client: SupabaseClient | null = null;
 
+/** True when this deployment has Supabase. Check it before work that only pays off with it. */
+export function isSupabaseConfigured(): boolean {
+  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY);
+}
+
+/** The response for a route that needs Supabase on a deployment without it. */
+export function supabaseMissing(): Response {
+  return Response.json(
+    { error: "Chat sync is not set up on this deployment (Supabase is not configured)." },
+    { status: 503 }
+  );
+}
+
 function getClient(): SupabaseClient {
   if (!client) {
     const url = process.env.SUPABASE_URL;

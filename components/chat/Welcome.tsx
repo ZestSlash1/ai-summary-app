@@ -1,6 +1,6 @@
 "use client";
 
-import type { RefObject } from "react";
+import { useLayoutEffect, type RefObject } from "react";
 import { signIn } from "next-auth/react";
 import {
   ArrowRight,
@@ -13,7 +13,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { BrandMark, GithubMark } from "@/components/BrandMark";
-import { gsap, useGSAP, SplitText, reducedMotion } from "@/lib/motion";
+import { gsap, SplitText, reducedMotion } from "@/lib/motion";
 import type { Conversation, GithubRepoLink } from "@/lib/types";
 
 export type Suggestion = { label: string; prompt: string; icon: typeof Bug };
@@ -92,7 +92,7 @@ export function WelcomeBanner({
 export function WelcomeHero({ firstName }: { firstName?: string }) {
   return (
     <div className="flex flex-col items-center px-4 text-center">
-      <div className="relative mb-6 flex h-14 w-14 items-center justify-center">
+      <div data-field-focus className="relative mb-6 flex h-14 w-14 items-center justify-center">
         <div
           aria-hidden
           data-welcome="glow"
@@ -178,11 +178,12 @@ export function useWelcomeIntro(
   composerRef: RefObject<HTMLElement | null>,
   active: boolean
 ) {
-  useGSAP(
-    () => {
-      if (!active || !scope.current) return;
+  // A fresh gsap.context per run (not useGSAP's shared one): React's dev double-mount reverts
+  // the first run, and the replay must start from a clean context or its tweens never play.
+  useLayoutEffect(() => {
+    if (!active || !scope.current || reducedMotion()) return;
+    const ctx = gsap.context(() => {
       const q = gsap.utils.selector(scope);
-      if (reducedMotion()) return;
 
       const title = q("[data-welcome=title]")[0];
       const split = title ? SplitText.create(title, { type: "words", mask: "words" }) : null;
@@ -214,7 +215,7 @@ export function useWelcomeIntro(
       });
 
       return () => split?.revert();
-    },
-    { dependencies: [active], scope, revertOnUpdate: true }
-  );
+    }, scope);
+    return () => ctx.revert();
+  }, [active, scope, composerRef]);
 }

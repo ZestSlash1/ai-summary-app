@@ -4,6 +4,7 @@ import { forwardRef, useLayoutEffect, useRef, type ReactNode, type RefObject } f
 import { ArrowUp, Loader2, Paperclip, Square, X } from "lucide-react";
 import { gsap, useGSAP, reducedMotion } from "@/lib/motion";
 import { ACCEPTED_IMAGE_TYPES, type PreparedImage } from "@/lib/imageResize";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 
 const MAX_TEXTAREA_PX = 220;
 
@@ -53,6 +54,8 @@ export const Composer = forwardRef<
   ref
 ) {
   const sendLabelRef = useRef<HTMLSpanElement>(null);
+  // On touch keyboards Enter is the only way to start a new line, so there it does not send.
+  const touch = useMediaQuery("(pointer: coarse)");
   const firstRender = useRef(true);
 
   // Grow with the text up to a cap, then scroll inside.
@@ -122,7 +125,7 @@ export const Composer = forwardRef<
         value={value}
         onChange={(e) => onValueChange(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+          if (e.key === "Enter" && !e.shiftKey && !touch && !e.nativeEvent.isComposing) {
             e.preventDefault();
             if (canSend) onSubmit();
           }
@@ -137,7 +140,8 @@ export const Composer = forwardRef<
         }}
         placeholder={placeholder}
         aria-label="Message ARO"
-        className="aro-bare-focus block max-h-[220px] min-h-[52px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[14.5px] leading-6 text-nimbus-text placeholder:text-nimbus-text-faint focus:outline-none"
+        enterKeyHint={touch ? "enter" : "send"}
+        className="aro-bare-focus block max-h-[220px] min-h-[52px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[16px] leading-6 sm:text-[14.5px] text-nimbus-text placeholder:text-nimbus-text-faint focus:outline-none"
       />
 
       <div className="flex items-center gap-2 px-2.5 pb-2.5 pt-1">

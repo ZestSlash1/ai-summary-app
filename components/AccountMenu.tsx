@@ -6,7 +6,7 @@ import { signIn, signOut, useSession } from "next-auth/react";
 import { LogOut, Settings } from "lucide-react";
 import type { Conversation } from "@/lib/types";
 import { GithubMark } from "./BrandMark";
-import { PopoverPanel, usePopoverDismiss } from "./Popover";
+import { PopoverPanel } from "./Popover";
 import { MENU_ROW } from "./ui/classes";
 
 /** Avatar in the sidebar footer. Signed out, it is the sign-in button. */
@@ -19,8 +19,7 @@ export function AccountMenu({
 }) {
   const { data: session, status } = useSession();
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  usePopoverDismiss(open, () => setOpen(false), rootRef);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   if (status === "loading") {
     return <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-nimbus-surface-2" />;
@@ -54,8 +53,9 @@ export function AccountMenu({
   );
 
   return (
-    <div ref={rootRef} className="relative min-w-0">
+    <div className="relative min-w-0">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
@@ -70,7 +70,7 @@ export function AccountMenu({
         )}
       </button>
 
-      <PopoverPanel open={open} className="bottom-full left-0 mb-2 w-64 p-1.5">
+      <PopoverPanel open={open} onClose={() => setOpen(false)} anchorRef={triggerRef} width={256} label="Account" className="p-1.5">
         <div className="flex items-center gap-2.5 px-2.5 py-2">
           {avatar}
           <div className="min-w-0 flex-1">

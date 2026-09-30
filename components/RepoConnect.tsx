@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Check, ChevronDown, Database, Lock, Plus, Search, Unlink } from "lucide-react";
+import { Check, ChevronDown, Database, Lock, Plus, RotateCw, Search, Unlink } from "lucide-react";
 import type { GithubRepoLink } from "@/lib/types";
 import { GithubMark } from "./BrandMark";
-import { PopoverPanel, usePopoverDismiss } from "./Popover";
+import { PopoverPanel } from "./Popover";
 import { useToast } from "./Toaster";
 import { CHIP, FIELD, MENU_LABEL, MENU_ROW } from "./ui/classes";
 
@@ -35,12 +35,13 @@ export function RepoConnect({
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [repos, setRepos] = useState<RepoOption[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [newRepoName, setNewRepoName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -54,17 +55,18 @@ export function RepoConnect({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forceOpen]);
 
-  usePopoverDismiss(open, () => setOpen(false), rootRef);
-
   useEffect(() => {
     if (!open) return;
-    window.setTimeout(() => filterRef.current?.focus(), 60);
-    if (!session?.user || repos !== null) return;
+    if (window.matchMedia("(pointer: fine)").matches) window.setTimeout(() => filterRef.current?.focus(), 60);
+    if (!session?.user || repos !== null || loadError) return;
     fetch("/api/github/repos")
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then(setRepos)
-      .catch(() => setRepos([]));
-  }, [open, session, repos]);
+      .then(async (res) => {
+        if (res.status === 401) throw new Error("Your GitHub sign-in expired. Sign out and back in to load your repos.");
+        if (!res.ok) throw new Error("GitHub did not return your repos. Try again.");
+        setRepos((await res.json()) as RepoOption[]);
+      })
+      .catch((err: Error) => setLoadError(err.message));
+  }, [open, session, repos, loadError]);
 
   const filtered = useMemo(() => {
     if (!repos) return null;
@@ -130,8 +132,9 @@ export function RepoConnect({
   }
 
   return (
-    <div ref={rootRef} className="relative">
+    <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
@@ -148,8 +151,12 @@ export function RepoConnect({
 
       <PopoverPanel
         open={open}
-        origin={placement === "up" ? "bottom left" : "top left"}
-        className={`${placement === "up" ? "bottom-full mb-2" : "top-full mt-2"} left-0 flex w-80 flex-col p-1.5`}
+        onClose={() => setOpen(false)}
+        anchorRef={triggerRef}
+        placement={placement === "up" ? "top-start" : "bottom-start"}
+        width={320}
+        label="Connect a GitHub repo"
+        className="p-1.5"
       >
         {value && (
           <div className="mb-1 flex items-center gap-2.5 rounded-lg bg-nimbus-surface-2 px-2.5 py-2">
@@ -173,8 +180,21 @@ export function RepoConnect({
             className={`${FIELD} pl-8`}
           />
         </div>
-        <div className="max-h-56 overflow-y-auto py-1">
-          {repos === null && (
+        <div className="min-h-0 overflow-y-auto py-1 sm:max-h-56">
+          {loadError && (
+            <div className="flex items-center gap-2 px-2.5 py-2">
+              <p className="min-w-0 flex-1 text-[12.5px] leading-relaxed text-nimbus-danger">{loadError}</p>
+              <button
+                type="button"
+                onClick={() => setLoadError(null)}
+                aria-label="Try loading repos again"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-nimbus-text-muted transition-colors hover:bg-nimbus-surface-2 hover:text-nimbus-text"
+              >
+                <RotateCw aria-hidden className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+          {repos === null && !loadError && (
             <div className="flex flex-col gap-1.5 p-2.5">
               {[0, 1, 2].map((i) => (
                 <span key={i} className="h-4 animate-pulse rounded bg-nimbus-surface-2" style={{ width: `${75 - i * 15}%` }} />

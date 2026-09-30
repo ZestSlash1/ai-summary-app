@@ -17,7 +17,6 @@ import {
   createConversation,
   loadActiveId,
   loadConversations,
-  loadModelSource,
   loadOpenTabs,
   loadSidebarCollapsed,
   saveActiveId,
@@ -26,7 +25,7 @@ import {
   saveSidebarCollapsed,
   titleFromMessage,
 } from "@/lib/storage";
-import { fetchDefaultModelForSource } from "@/lib/models";
+import { resolveNewChatModel } from "@/lib/models";
 import {
   createConversationRemote,
   deleteConversationRemote,
@@ -105,7 +104,7 @@ export default function Home() {
       if (stored.length > 0) {
         showConversations(stored, loadActiveId());
       } else {
-        const model = await fetchDefaultModelForSource(loadModelSource());
+        const model = await resolveNewChatModel();
         showConversations([createConversation(model)]);
       }
     }
@@ -149,7 +148,7 @@ export default function Home() {
       }
 
       if (remote.length === 0) {
-        const model = await fetchDefaultModelForSource(loadModelSource());
+        const model = await resolveNewChatModel();
         const created = await createConversationRemote(model);
         if (created) remote = [created];
       }
@@ -215,7 +214,7 @@ export default function Home() {
 
     creatingRef.current = true;
     try {
-      const model = await fetchDefaultModelForSource(loadModelSource());
+      const model = await resolveNewChatModel();
       let created: Conversation | null;
       if (useRemoteRef.current) {
         created = await createConversationRemote(model);
@@ -417,7 +416,10 @@ export default function Home() {
         onNewChat={() => void handleNewChat()}
         onRename={renameConversation}
         onDelete={deleteConversation}
-        onOpenPalette={() => setPaletteOpen(true)}
+        onOpenPalette={() => {
+          setSidebarOpen(false);
+          setPaletteOpen(true);
+        }}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         collapsed={collapsed}

@@ -168,7 +168,7 @@ export function CommandPalette({
             aria-activedescendant={items[safeIndex] ? `palette-${items[safeIndex].id}` : undefined}
             role="combobox"
             aria-expanded="true"
-            className="aro-bare-focus h-13 min-w-0 flex-1 bg-transparent py-4 text-[15px] text-nimbus-text placeholder:text-nimbus-text-faint focus:outline-none"
+            className="aro-bare-focus h-13 min-w-0 flex-1 bg-transparent py-4 text-[16px] text-nimbus-text sm:text-[15px] placeholder:text-nimbus-text-faint focus:outline-none"
           />
           <kbd className="rounded-md border border-nimbus-border px-1.5 py-0.5 font-sans text-[11px] text-nimbus-text-faint">Esc</kbd>
         </div>

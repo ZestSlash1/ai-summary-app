@@ -1,8 +1,41 @@
 "use client";
 
-import { RotateCw } from "lucide-react";
+import { signIn, useSession } from "next-auth/react";
+import { Lock, RotateCw } from "lucide-react";
 import { useHomeGpu, bonsaiState, type GpuState } from "@/lib/useHomeGpu";
-import { BUTTON_SECONDARY } from "./ui/classes";
+import { GithubMark } from "./BrandMark";
+import { BUTTON_PRIMARY, BUTTON_SECONDARY } from "./ui/classes";
+
+/**
+ * Why Bonsai is locked, and the way in: signed out, sign in; signed in but not on the
+ * allow list, say so plainly instead of hiding the option.
+ */
+export function BonsaiAccessNote({ compact = false }: { compact?: boolean }) {
+  const { status } = useSession();
+  const signedOut = status !== "authenticated";
+  return (
+    <div
+      className={`flex items-start gap-2.5 rounded-[10px] border border-nimbus-border bg-nimbus-panel ${
+        compact ? "px-3 py-2.5" : "px-3.5 py-3"
+      }`}
+    >
+      <Lock aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-nimbus-text-muted" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[12.5px] leading-relaxed text-nimbus-text-muted">
+          {signedOut
+            ? "Bonsai and image editing run on the owner's home PC. Sign in with an allowed GitHub account to use them."
+            : "This GitHub account is not on the allow list for Bonsai and image editing."}
+        </p>
+        {signedOut && (
+          <button type="button" onClick={() => signIn("github")} className={`${BUTTON_PRIMARY} mt-2 h-8 px-3 text-[12.5px]`}>
+            <GithubMark className="h-3.5 w-3.5" />
+            Sign in with GitHub
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const dotClass: Record<GpuState, string> = {
   online: "bg-nimbus-free text-nimbus-free",
@@ -51,13 +84,7 @@ function StateRow({
 export function GpuStatusPanel() {
   const { allowed, status, checking, refresh } = useHomeGpu({ pollMs: 15_000 });
 
-  if (allowed === false) {
-    return (
-      <p className="text-[13px] leading-relaxed text-nimbus-text-muted">
-        Bonsai and image editing run on the owner&apos;s PC and are limited to allowed accounts.
-      </p>
-    );
-  }
+  if (allowed === false) return <BonsaiAccessNote />;
 
   if (!status) {
     return (
@@ -85,19 +112,5 @@ export function GpuStatusPanel() {
         {checking ? "Checking" : "Check again"}
       </button>
     </div>
-  );
-}
-
-/** One line under the source toggle, shown only while Bonsai is the chosen source. */
-export function BonsaiStateLine({ active }: { active: boolean }) {
-  const { allowed, status } = useHomeGpu({ enabled: active, pollMs: 15_000 });
-  if (!active || allowed === false || !status) return null;
-
-  const state = bonsaiState(status);
-  return (
-    <p role="status" className="flex items-center gap-2 text-[12.5px] text-nimbus-text-muted">
-      <span aria-hidden className={`relative h-2 w-2 shrink-0 rounded-full ${dotClass[state]}`} />
-      Bonsai is {bonsaiLabel[state].label.toLowerCase()}. {bonsaiLabel[state].hint}
-    </p>
   );
 }

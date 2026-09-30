@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { supabase } from "@/lib/supabase";
+import { isSupabaseConfigured, supabase, supabaseMissing } from "@/lib/supabase";
 import { FALLBACK_MODEL } from "@/lib/types";
 
 export async function GET() {
@@ -7,6 +7,7 @@ export async function GET() {
   if (!session?.githubUserId) {
     return Response.json({ error: "Not signed in." }, { status: 401 });
   }
+  if (!isSupabaseConfigured()) return supabaseMissing();
 
   const { data, error } = await supabase
     .from("conversations")
@@ -35,6 +36,8 @@ export async function POST(request: Request) {
   if (!session?.githubUserId) {
     return Response.json({ error: "Not signed in." }, { status: 401 });
   }
+
+  if (!isSupabaseConfigured()) return supabaseMissing();
 
   const body = (await request.json().catch(() => ({}))) as {
     model?: string;
