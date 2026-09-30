@@ -5,7 +5,7 @@ import { ArrowUp, Loader2, Paperclip, Square, X } from "lucide-react";
 import { gsap, useGSAP, reducedMotion } from "@/lib/motion";
 import { ACCEPTED_IMAGE_TYPES, type PreparedImage } from "@/lib/imageResize";
 import { useMediaQuery } from "@/lib/useMediaQuery";
-import { SlashCommandMenu, type SlashCommand } from "./SlashCommandMenu";
+import { SlashCommandMenu, matchSlashCommands, type SlashCommand } from "./SlashCommandMenu";
 
 const MAX_TEXTAREA_PX = 220;
 
@@ -89,6 +89,9 @@ export const Composer = forwardRef<
   );
 
   const showSlashMenu = value.startsWith("/") && !value.slice(1).includes(" ");
+  // While the menu lists commands, Enter is its to pick one: the menu listens on window,
+  // after this textarea, so sending here would post "/model" and unmount the menu first.
+  const slashMenuHasCommands = showSlashMenu && matchSlashCommands(value).length > 0;
 
   const handleSlashSelect = (cmd: SlashCommand["id"]) => {
     onValueChange("");
@@ -167,6 +170,7 @@ export const Composer = forwardRef<
         onChange={(e) => onValueChange(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !touch && !e.nativeEvent.isComposing) {
+            if (slashMenuHasCommands) return;
             e.preventDefault();
             if (canSend) onSubmit();
           }
