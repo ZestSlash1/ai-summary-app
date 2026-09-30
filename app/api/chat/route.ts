@@ -218,6 +218,14 @@ export async function POST(request: Request) {
   );
 
   let systemPrompt = BASE_SYSTEM_PROMPT;
+  // Say what is actually answering, so "are you Bonsai?" gets a true answer.
+  const runtime =
+    modelSource === 'bonsai'
+      ? `Bonsai (model "${model || 'bonsai'}"), a local model running on the owner's home PC`
+      : modelSource === 'omniroute'
+        ? `the model "${model || 'default'}" through the owner's OmniRoute server`
+        : `the model "${model || 'default'}" through Vercel AI Gateway`;
+  systemPrompt += `\n\nYou are running as ${runtime}. If asked which model or backend you are, say so plainly. ARO is the app, not the model.`;
   if (githubRepo) systemPrompt += repoSystemPrompt(githubRepo, Boolean(githubToken));
   if (plan) {
     systemPrompt +=

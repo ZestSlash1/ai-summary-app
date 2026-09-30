@@ -29,7 +29,8 @@ import { CHIP } from "./ui/classes";
 import { extractPushableFiles } from "@/lib/codeBlocks";
 import type { McpConnector } from "@/lib/mcp";
 import type { Conversation, GithubRepoLink } from "@/lib/types";
-import { loadModelSource } from "@/lib/storage";
+import { loadModelSource, type ModelSource } from "@/lib/storage";
+import { parseModelRef } from "@/lib/modelRef";
 import { useHomeGpu } from "@/lib/useHomeGpu";
 import { ImageError, prepareImage, type PreparedImage } from "@/lib/imageResize";
 
@@ -43,7 +44,7 @@ function textOf(message: UIMessage): string {
 const IMAGE_EDIT_IDEAS = ["Remove the background", "Make it look like evening", "Turn it into a pencil sketch"];
 
 /** A short, safe sentence for a failed chat request. Our own routes send readable errors. */
-function chatErrorText(err: Error): string {
+function chatErrorText(err: Error, source: ModelSource): string {
   let text = err.message || "";
   try {
     const parsed = JSON.parse(text);
@@ -52,7 +53,7 @@ function chatErrorText(err: Error): string {
     // Not JSON: use the message as is.
   }
   if (/sign in|not allowed|GPU|image edit/i.test(text)) return text;
-  if (loadModelSource() === "bonsai") {
+  if (source === "bonsai") {
     return "Bonsai did not respond. Check that the home PC is on (Settings shows its state), then try again.";
   }
   return "Something went wrong. Try again.";
@@ -226,15 +227,19 @@ export function ChatPanel({
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        body: () => ({
-          model: modelRef.current,
-          modelSource: loadModelSource(),
+        body: () => {
+          // The chat's model carries its source; older chats fall back to the old app-wide one.
+          const ref = parseModelRef(modelRef.current, loadModelSource());
+          return {
+          model: ref.id,
+          modelSource: ref.source,
           mcpConnectors: connectorsRef.current
             .filter((c) => c.enabled)
             .map((c) => ({ url: c.url, authHeader: c.authHeader })),
           githubRepo: repoRef.current,
           plan: planRef.current,
-        }),
+          };
+        },
       })
   );
   /* eslint-enable react-hooks/refs */
@@ -329,7 +334,7 @@ export function ChatPanel({
     // The composer glides from the middle of the empty screen to its docked spot.
     if (isEmpty && composerRef.current) flipState.current = Flip.getState(composerRef.current);
     stickToBottom.current = true;
-    setTurn({ startedAt: Date.now(), bonsai: loadModelSource() === "bonsai" });
+    setTurn({ startedAt: Date.now(), bonsai: parseModelRef(model, loadModelSource()).source === "bonsai" });
     if (image) {
       sendMessage({
         text,
@@ -363,7 +368,7 @@ export function ChatPanel({
   }
 
   function retry() {
-    setTurn({ startedAt: Date.now(), bonsai: loadModelSource() === "bonsai" });
+    setTurn({ startedAt: Date.now(), bonsai: parseModelRef(model, loadModelSource()).source === "bonsai" });
     void regenerate();
   }
 
@@ -707,7 +712,7 @@ export function ChatPanel({
               role="alert"
               className="flex items-center gap-3 rounded-[12px] border border-nimbus-danger/25 bg-nimbus-danger-soft px-3.5 py-2.5 text-[13px] text-nimbus-text"
             >
-              <p className="min-w-0 flex-1">{chatErrorText(error)}</p>
+              <p className="min-w-0 flex-1">{chatErrorText(error, parseModelRef(model, loadModelSource()).source)}</p>
               <button
                 type="button"
                 onClick={retry}

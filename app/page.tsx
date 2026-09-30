@@ -17,7 +17,6 @@ import {
   createConversation,
   loadActiveId,
   loadConversations,
-  loadModelSource,
   loadOpenTabs,
   loadSidebarCollapsed,
   saveActiveId,
@@ -105,7 +104,7 @@ export default function Home() {
       if (stored.length > 0) {
         showConversations(stored, loadActiveId());
       } else {
-        const model = await resolveNewChatModel(loadModelSource());
+        const model = await resolveNewChatModel();
         showConversations([createConversation(model)]);
       }
     }
@@ -149,7 +148,7 @@ export default function Home() {
       }
 
       if (remote.length === 0) {
-        const model = await resolveNewChatModel(loadModelSource());
+        const model = await resolveNewChatModel();
         const created = await createConversationRemote(model);
         if (created) remote = [created];
       }
@@ -215,7 +214,7 @@ export default function Home() {
 
     creatingRef.current = true;
     try {
-      const model = await resolveNewChatModel(loadModelSource());
+      const model = await resolveNewChatModel();
       let created: Conversation | null;
       if (useRemoteRef.current) {
         created = await createConversationRemote(model);

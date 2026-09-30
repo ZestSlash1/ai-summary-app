@@ -114,17 +114,3 @@ export function GpuStatusPanel() {
     </div>
   );
 }
-
-/** One line under the source toggle, shown only while Bonsai is the chosen source. */
-export function BonsaiStateLine({ active }: { active: boolean }) {
-  const { allowed, status } = useHomeGpu({ enabled: active, pollMs: 15_000 });
-  if (!active || allowed === false || !status) return null;
-
-  const state = bonsaiState(status);
-  return (
-    <p role="status" className="flex items-center gap-2 text-[12.5px] text-nimbus-text-muted">
-      <span aria-hidden className={`relative h-2 w-2 shrink-0 rounded-full ${dotClass[state]}`} />
-      Bonsai is {bonsaiLabel[state].label.toLowerCase()}. {bonsaiLabel[state].hint}
-    </p>
-  );
-}

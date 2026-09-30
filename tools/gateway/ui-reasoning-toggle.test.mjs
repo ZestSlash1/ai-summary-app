@@ -16,14 +16,14 @@ test('extractReasoning extracts reasoning field or fallback text', () => {
   assert.equal(extractReasoning({ type: 'reasoning' }), null);
 });
 
-test('ModelSourceToggle.tsx includes Bonsai (Local) option and no em-dashes', () => {
-  const filePath = path.resolve('components/ModelSourceToggle.tsx');
+// The app-wide source toggle was replaced by per-chat model refs; Bonsai now lives in the
+// model picker's "On your PC" group, which must stay visible even when it is locked.
+test('ModelSwitcher.tsx keeps a local Bonsai group and no em-dashes', () => {
+  const filePath = path.resolve('components/ModelSwitcher.tsx');
   const content = fs.readFileSync(filePath, 'utf-8');
-  assert.ok(
-    content.includes('{ value: "bonsai", label: "Bonsai (Local)" }'),
-    'Expected ModelSourceToggle to contain Bonsai option'
-  );
-  assert.ok(!content.includes('—'), 'ModelSourceToggle should contain zero em-dashes');
+  assert.ok(content.includes('On your PC · Bonsai'), 'Expected a local Bonsai group in the model picker');
+  assert.ok(content.includes('locked: true'), 'Expected Bonsai to stay listed (locked) for accounts without access');
+  assert.ok(!content.includes('—'), 'ModelSwitcher should contain zero em-dashes');
 });
 
 test('ChatPanel.tsx handles reasoning parts with details and Thought process summary', () => {

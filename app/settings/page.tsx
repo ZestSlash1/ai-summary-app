@@ -6,16 +6,14 @@ import { signIn, signOut, useSession } from "next-auth/react";
 import { ArrowLeft, Check, Trash2, X } from "lucide-react";
 import { gsap, useGSAP, reducedMotion } from "@/lib/motion";
 import { ModelSwitcher } from "@/components/ModelSwitcher";
-import { ModelSourceToggle } from "@/components/ModelSourceToggle";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { GpuStatusPanel } from "@/components/GpuStatus";
 import { McpConnectorsList } from "@/components/McpConnectorsList";
 import { BrandTile, GithubMark } from "@/components/BrandMark";
 import { useToast } from "@/components/Toaster";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY } from "@/components/ui/classes";
-import { loadSavedDefaultModel, saveDefaultModel, saveConversations, saveOpenTabs } from "@/lib/storage";
-import { fetchDefaultModelForSource } from "@/lib/models";
-import { useModelSource } from "@/lib/useModelSource";
+import { saveDefaultModelRef, saveConversations, saveOpenTabs } from "@/lib/storage";
+import { resolveNewChatModel } from "@/lib/models";
 import { BUILTIN_SKILLS, type Skill } from "@/lib/skills";
 
 const SECTIONS = [
@@ -31,7 +29,6 @@ const SECTIONS = [
 export default function SettingsPage() {
   const { data: session, status } = useSession();
   const toast = useToast();
-  const { source, ready: sourceReady } = useModelSource();
   const [defaultModel, setDefaultModel] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [approvedSkills, setApprovedSkills] = useState<Skill[]>([]);
@@ -39,21 +36,14 @@ export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState(SECTIONS[0].id);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // The default is per source: show the one saved for the current source, or its free pick.
+  // The model new chats start with: the saved choice, or the same free pick a new chat would get.
   useEffect(() => {
-    if (!sourceReady) return;
     let cancelled = false;
-    const saved = loadSavedDefaultModel(source);
-    if (saved) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setDefaultModel(saved);
-    } else {
-      void fetchDefaultModelForSource(source).then((model) => !cancelled && setDefaultModel(model));
-    }
+    void resolveNewChatModel().then((ref) => !cancelled && setDefaultModel(ref));
     return () => {
       cancelled = true;
     };
-  }, [source, sourceReady]);
+  }, []);
 
   useEffect(() => {
     if (!session?.user) return;
@@ -114,7 +104,7 @@ export default function SettingsPage() {
 
   function handleDefaultModelChange(model: string) {
     setDefaultModel(model);
-    saveDefaultModel(source, model);
+    saveDefaultModelRef(model);
   }
 
   function handleClearData() {
@@ -202,11 +192,12 @@ export default function SettingsPage() {
             <ThemeToggle />
           </Section>
 
-          <Section id="models" title="Models" description="Where models come from applies to every chat. The default model starts each new chat.">
+          <Section
+            id="models"
+            title="Models"
+            description="Each chat keeps its own model, picked from the composer. This one starts every new chat."
+          >
             <Card className="flex flex-col gap-5">
-              <Field label="Source">
-                <ModelSourceToggle />
-              </Field>
               <Field label="Default model for new chats">
                 {defaultModel ? (
                   <ModelSwitcher
@@ -214,7 +205,6 @@ export default function SettingsPage() {
                     onChange={handleDefaultModelChange}
                     placement="down"
                     variant="field"
-                    showSource={false}
                   />
                 ) : (
                   <div className="h-10 w-56 animate-pulse rounded-lg bg-nimbus-surface-2" />

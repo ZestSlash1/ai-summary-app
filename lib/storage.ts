@@ -49,46 +49,42 @@ export function createConversation(model: string): Conversation {
   };
 }
 
-export type ModelSource = "gateway" | "omniroute" | "bonsai";
+export type ModelSource = "gateway" | "omniroute" | "bonsai" | "hermes";
 
-/** The default model the user picked for a source, or null if they never chose one.
- * Model ids differ per source, so each source keeps its own default. The old single key
- * predates sources and held a Gateway id, so it still counts as the Gateway default. */
-export function loadSavedDefaultModel(source: ModelSource): string | null {
+/** The model new chats start with, as a "source::id" ref, or null if the user never chose one.
+ * The old key held a bare Gateway id, so it still counts as a Gateway default. */
+export function loadDefaultModelRef(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    return (
-      window.localStorage.getItem(`${DEFAULT_MODEL_KEY}:${source}`) ||
-      (source === "gateway" ? window.localStorage.getItem(DEFAULT_MODEL_KEY) : null)
-    );
+    const ref = window.localStorage.getItem(`${DEFAULT_MODEL_KEY}:ref`);
+    if (ref) return ref;
+    const legacy = window.localStorage.getItem(DEFAULT_MODEL_KEY);
+    return legacy ? `gateway::${legacy}` : null;
   } catch {
     return null;
   }
 }
 
-export function saveDefaultModel(source: ModelSource, model: string) {
+export function saveDefaultModelRef(ref: string) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(`${DEFAULT_MODEL_KEY}:${source}`, model);
+    window.localStorage.setItem(`${DEFAULT_MODEL_KEY}:ref`, ref);
   } catch {
-    // Not critical: new chats fall back to the source's free model.
+    // Not critical: new chats fall back to a free model.
   }
 }
 
+/** The app-wide source from before each chat stored its own. Only used to read older chats,
+ * whose model is a bare id, and to pick a first default for users who had chosen one. */
 export function loadModelSource(): ModelSource {
   if (typeof window === "undefined") return "gateway";
-  const raw = window.localStorage.getItem(MODEL_SOURCE_KEY);
-  if (raw === "omniroute" || raw === "bonsai") return raw;
+  try {
+    const raw = window.localStorage.getItem(MODEL_SOURCE_KEY);
+    if (raw === "omniroute" || raw === "bonsai") return raw;
+  } catch {
+    // Storage unavailable.
+  }
   return "gateway";
-}
-
-/** Fired on window when the source changes, so every open model picker can follow. */
-export const MODEL_SOURCE_EVENT = "aro:model-source";
-
-export function saveModelSource(source: ModelSource) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(MODEL_SOURCE_KEY, source);
-  window.dispatchEvent(new CustomEvent(MODEL_SOURCE_EVENT, { detail: source }));
 }
 
 const OPEN_TABS_KEY = "aro-open-tabs";
