@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { Lock } from "lucide-react";
 import type { ModelSource } from "@/lib/storage";
-import { MODEL_SOURCE_EVENT, loadModelSource, saveModelSource } from "@/lib/storage";
-import { useHomeGpu } from "@/lib/useHomeGpu";
-import { BonsaiStateLine } from "@/components/GpuStatus";
+import { useModelSource } from "@/lib/useModelSource";
+import { BonsaiAccessNote, BonsaiStateLine } from "@/components/GpuStatus";
 import { Segmented } from "@/components/ui/Segmented";
 
 const OPTIONS: { value: ModelSource; label: string }[] = [
@@ -14,23 +14,30 @@ const OPTIONS: { value: ModelSource; label: string }[] = [
 ];
 
 export function ModelSourceToggle() {
-  const [source, setSource] = useState<ModelSource>("gateway");
-  const { allowed } = useHomeGpu();
+  const { source, setSource, bonsaiAllowed } = useModelSource();
+  const [showLocked, setShowLocked] = useState(false);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSource(loadModelSource());
-    const onSource = (e: Event) => setSource((e as CustomEvent<ModelSource>).detail);
-    window.addEventListener(MODEL_SOURCE_EVENT, onSource);
-    return () => window.removeEventListener(MODEL_SOURCE_EVENT, onSource);
-  }, []);
-
-  // Bonsai runs on the owner's PC: accounts that cannot use it do not see it.
-  const options = allowed === false ? OPTIONS.filter((o) => o.value !== "bonsai") : OPTIONS;
+  // Bonsai stays visible for everyone; accounts that cannot use it see why when they pick it.
+  const locked = bonsaiAllowed === false;
+  const options = OPTIONS.map((o) =>
+    o.value === "bonsai" && locked
+      ? { ...o, locked: true, hint: "Needs an allowed GitHub account", icon: <Lock aria-hidden className="h-3 w-3" /> }
+      : o
+  );
 
   return (
     <div className="flex flex-col items-start gap-3">
-      <Segmented label="Model source" value={source} options={options} onChange={saveModelSource} />
+      <Segmented
+        label="Model source"
+        value={source}
+        options={options}
+        onChange={(value) => {
+          setShowLocked(false);
+          setSource(value);
+        }}
+        onLocked={() => setShowLocked(true)}
+      />
+      {showLocked && locked && <BonsaiAccessNote />}
       <BonsaiStateLine active={source === "bonsai"} />
     </div>
   );

@@ -13,8 +13,9 @@ import { McpConnectorsList } from "@/components/McpConnectorsList";
 import { BrandTile, GithubMark } from "@/components/BrandMark";
 import { useToast } from "@/components/Toaster";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY } from "@/components/ui/classes";
-import { FALLBACK_MODEL } from "@/lib/types";
-import { loadDefaultModel, saveDefaultModel, saveConversations, saveOpenTabs } from "@/lib/storage";
+import { loadSavedDefaultModel, saveDefaultModel, saveConversations, saveOpenTabs } from "@/lib/storage";
+import { fetchDefaultModelForSource } from "@/lib/models";
+import { useModelSource } from "@/lib/useModelSource";
 import { BUILTIN_SKILLS, type Skill } from "@/lib/skills";
 
 const SECTIONS = [
@@ -30,17 +31,29 @@ const SECTIONS = [
 export default function SettingsPage() {
   const { data: session, status } = useSession();
   const toast = useToast();
-  const [defaultModel, setDefaultModel] = useState(FALLBACK_MODEL);
+  const { source, ready: sourceReady } = useModelSource();
+  const [defaultModel, setDefaultModel] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [approvedSkills, setApprovedSkills] = useState<Skill[]>([]);
   const [proposedSkills, setProposedSkills] = useState<Skill[]>([]);
   const [activeSection, setActiveSection] = useState(SECTIONS[0].id);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // The default is per source: show the one saved for the current source, or its free pick.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDefaultModel(loadDefaultModel());
-  }, []);
+    if (!sourceReady) return;
+    let cancelled = false;
+    const saved = loadSavedDefaultModel(source);
+    if (saved) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDefaultModel(saved);
+    } else {
+      void fetchDefaultModelForSource(source).then((model) => !cancelled && setDefaultModel(model));
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [source, sourceReady]);
 
   useEffect(() => {
     if (!session?.user) return;
@@ -101,7 +114,7 @@ export default function SettingsPage() {
 
   function handleDefaultModelChange(model: string) {
     setDefaultModel(model);
-    saveDefaultModel(model);
+    saveDefaultModel(source, model);
   }
 
   function handleClearData() {
@@ -194,8 +207,18 @@ export default function SettingsPage() {
               <Field label="Source">
                 <ModelSourceToggle />
               </Field>
-              <Field label="Default model">
-                <ModelSwitcher value={defaultModel} onChange={handleDefaultModelChange} placement="down" variant="field" />
+              <Field label="Default model for new chats">
+                {defaultModel ? (
+                  <ModelSwitcher
+                    value={defaultModel}
+                    onChange={handleDefaultModelChange}
+                    placement="down"
+                    variant="field"
+                    showSource={false}
+                  />
+                ) : (
+                  <div className="h-10 w-56 animate-pulse rounded-lg bg-nimbus-surface-2" />
+                )}
               </Field>
             </Card>
           </Section>

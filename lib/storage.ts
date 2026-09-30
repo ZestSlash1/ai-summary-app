@@ -1,5 +1,4 @@
 import type { Conversation } from "./types";
-import { FALLBACK_MODEL } from "./types";
 
 const CONVERSATIONS_KEY = "nimbus-conversations";
 const ACTIVE_ID_KEY = "nimbus-active-conversation";
@@ -40,7 +39,7 @@ export function saveActiveId(id: string) {
   window.localStorage.setItem(ACTIVE_ID_KEY, id);
 }
 
-export function createConversation(model: string = loadDefaultModel()): Conversation {
+export function createConversation(model: string): Conversation {
   return {
     id: crypto.randomUUID(),
     title: "New chat",
@@ -50,17 +49,31 @@ export function createConversation(model: string = loadDefaultModel()): Conversa
   };
 }
 
-export function loadDefaultModel(): string {
-  if (typeof window === "undefined") return FALLBACK_MODEL;
-  return window.localStorage.getItem(DEFAULT_MODEL_KEY) || FALLBACK_MODEL;
-}
-
-export function saveDefaultModel(model: string) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(DEFAULT_MODEL_KEY, model);
-}
-
 export type ModelSource = "gateway" | "omniroute" | "bonsai";
+
+/** The default model the user picked for a source, or null if they never chose one.
+ * Model ids differ per source, so each source keeps its own default. The old single key
+ * predates sources and held a Gateway id, so it still counts as the Gateway default. */
+export function loadSavedDefaultModel(source: ModelSource): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return (
+      window.localStorage.getItem(`${DEFAULT_MODEL_KEY}:${source}`) ||
+      (source === "gateway" ? window.localStorage.getItem(DEFAULT_MODEL_KEY) : null)
+    );
+  } catch {
+    return null;
+  }
+}
+
+export function saveDefaultModel(source: ModelSource, model: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(`${DEFAULT_MODEL_KEY}:${source}`, model);
+  } catch {
+    // Not critical: new chats fall back to the source's free model.
+  }
+}
 
 export function loadModelSource(): ModelSource {
   if (typeof window === "undefined") return "gateway";

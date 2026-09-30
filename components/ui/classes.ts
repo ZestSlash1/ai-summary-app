@@ -9,9 +9,9 @@ export const MENU_ROW =
 /** Small uppercase-free section label inside popovers and settings. */
 export const MENU_LABEL = "px-2.5 pb-1 pt-2 text-[11.5px] font-medium text-nimbus-text-faint";
 
-/** Text input on a surface. */
+/** Text input on a surface. 16px on phones, because iOS Safari zooms into smaller fields. */
 export const FIELD =
-  "w-full rounded-lg border border-nimbus-border bg-nimbus-chrome px-3 py-2 text-[13px] text-nimbus-text placeholder:text-nimbus-text-faint transition-[border-color,box-shadow] duration-200 focus:border-nimbus-accent/60 focus:shadow-[0_0_0_3px_var(--nimbus-accent-soft)] focus:outline-none";
+  "w-full rounded-lg border border-nimbus-border bg-nimbus-chrome px-3 py-2 text-[16px] text-nimbus-text placeholder:text-nimbus-text-faint transition-[border-color,box-shadow] sm:text-[13px] duration-200 focus:border-nimbus-accent/60 focus:shadow-[0_0_0_3px_var(--nimbus-accent-soft)] focus:outline-none";
 
 export const BUTTON_PRIMARY =
   "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-nimbus-accent px-3.5 text-[13px] font-medium text-white shadow-[var(--nimbus-glow)] transition-[background-color,transform,opacity] duration-200 hover:bg-nimbus-accent-hover active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40";

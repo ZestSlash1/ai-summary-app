@@ -1,4 +1,4 @@
-import type { ModelSource } from "./storage";
+import { loadSavedDefaultModel, type ModelSource } from "./storage";
 import type { ModelOption } from "./types";
 import { FALLBACK_MODEL } from "./types";
 
@@ -25,6 +25,12 @@ export function fetchModelCatalog(source: ModelSource, force = false): Promise<M
   return models;
 }
 
+/** The model a new chat starts with: the user's saved default for the source, else its free pick. */
+export async function resolveNewChatModel(source: ModelSource): Promise<string> {
+  return loadSavedDefaultModel(source) ?? fetchDefaultModelForSource(source);
+}
+
+/** The first free model a source offers (else its first model), for when nothing was chosen. */
 export async function fetchDefaultModelForSource(
   source: ModelSource
 ): Promise<string> {

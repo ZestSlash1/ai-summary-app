@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { Plug } from "lucide-react";
 import type { McpConnector } from "@/lib/mcp";
 import { McpConnectorsList } from "./McpConnectorsList";
-import { PopoverPanel, usePopoverDismiss } from "./Popover";
+import { PopoverPanel } from "./Popover";
 import { CHIP } from "./ui/classes";
 
 /** Composer chip for MCP tool servers, with the add and toggle list in a popover. */
@@ -19,12 +19,12 @@ export function McpConnectors({
   onConnectorsChange: (connectors: McpConnector[]) => void;
   enabledCount: number;
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  usePopoverDismiss(open, () => onOpenChange(false), rootRef);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <div ref={rootRef} className="relative">
+    <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => onOpenChange(!open)}
         aria-expanded={open}
@@ -40,7 +40,14 @@ export function McpConnectors({
           </span>
         )}
       </button>
-      <PopoverPanel open={open} className="bottom-full left-0 mb-2 w-80 p-3.5">
+      <PopoverPanel
+        open={open}
+        onClose={() => onOpenChange(false)}
+        anchorRef={triggerRef}
+        width={320}
+        label="MCP connectors"
+        className="p-3.5"
+      >
         <p className="text-[13px] font-medium text-nimbus-text">MCP connectors</p>
         <p className="mb-3 mt-0.5 text-[12.5px] text-nimbus-text-muted">
           Remote tool servers the model can call in this chat.

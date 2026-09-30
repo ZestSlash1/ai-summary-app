@@ -3,7 +3,14 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { gsap, reducedMotion } from "@/lib/motion";
 
-export type SegmentedOption<T extends string> = { value: T; label: ReactNode; icon?: ReactNode };
+export type SegmentedOption<T extends string> = {
+  value: T;
+  label: ReactNode;
+  icon?: ReactNode;
+  /** Shown but not selectable; clicking calls onLocked so the caller can explain why. */
+  locked?: boolean;
+  hint?: string;
+};
 
 /**
  * A pill of options with an indicator that glides to the selected one, so the change
@@ -13,12 +20,14 @@ export function Segmented<T extends string>({
   value,
   options,
   onChange,
+  onLocked,
   label,
   size = "md",
 }: {
   value: T;
   options: SegmentedOption<T>[];
   onChange: (value: T) => void;
+  onLocked?: (value: T) => void;
   label: string;
   size?: "sm" | "md";
 }) {
@@ -72,10 +81,16 @@ export function Segmented<T extends string>({
             type="button"
             role="radio"
             aria-checked={selected}
+            aria-disabled={opt.locked || undefined}
+            title={opt.hint}
             data-value={opt.value}
-            onClick={() => onChange(opt.value)}
+            onClick={() => (opt.locked ? onLocked?.(opt.value) : onChange(opt.value))}
             className={`relative z-10 inline-flex items-center gap-1.5 rounded-[7px] font-medium transition-colors duration-300 ${pad} ${
-              selected ? "text-nimbus-text" : "text-nimbus-text-muted hover:text-nimbus-text"
+              selected
+                ? "text-nimbus-text"
+                : opt.locked
+                  ? "text-nimbus-text-faint hover:text-nimbus-text-muted"
+                  : "text-nimbus-text-muted hover:text-nimbus-text"
             }`}
           >
             {opt.icon}
