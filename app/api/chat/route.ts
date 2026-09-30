@@ -145,6 +145,7 @@ export async function POST(request: Request) {
     mcpConnectors,
     githubRepo,
     plan,
+    skills,
   }: {
     id?: string;
     messages: UIMessage[];
@@ -153,6 +154,7 @@ export async function POST(request: Request) {
     mcpConnectors?: McpConnectorInput[];
     githubRepo?: GithubRepoInput;
     plan?: boolean;
+    skills?: { name: string; description: string; body?: string; skillMd?: string; enabled?: boolean }[];
   } = await request.json();
 
   const session = await auth();
@@ -229,16 +231,50 @@ export async function POST(request: Request) {
   const repoTools: ToolSet =
     githubRepo && githubToken ? createRepoTools(githubToken, githubRepo) : {};
 
+  const enabledSkills = (skills ?? []).filter((s) => s.enabled !== false);
+  const skillTools: ToolSet =
+    enabledSkills.length > 0
+      ? {
+          loadSkill: tool({
+            description:
+              'Load the complete instructions and workflow for an available skill by name.',
+            inputSchema: z.object({
+              name: z
+                .string()
+                .describe('The exact name of the skill to load, from the available skills list.'),
+            }),
+            execute: async ({ name }) => {
+              const match = enabledSkills.find(
+                (s) => s.name.toLowerCase() === name.trim().toLowerCase()
+              );
+              if (!match) return { error: `Skill "${name}" not found.` };
+              let body = match.body;
+              if (!body && match.skillMd) {
+                const m = match.skillMd.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/);
+                body = m ? m[1].trim() : match.skillMd.trim();
+              }
+              return { name: match.name, instructions: body || match.description };
+            },
+          }),
+        }
+      : {};
+
   // First-party tools go last so an MCP server cannot shadow one by reusing its name.
   const tools: ToolSet = Object.assign(
     {},
     ...mcpToolSets.filter(Boolean),
     builtinTools,
     imageTools,
-    repoTools
+    repoTools,
+    skillTools
   );
 
   let systemPrompt = BASE_SYSTEM_PROMPT;
+  if (enabledSkills.length > 0) {
+    systemPrompt += `\n\nAvailable skills (call loadSkill to view instructions when relevant):\n${enabledSkills
+      .map((s) => `- ${s.name}: ${s.description}`)
+      .join('\n')}`;
+  }
   // Say what is actually answering, so "are you Bonsai?" gets a true answer.
   const runtime =
     modelSource === 'bonsai'

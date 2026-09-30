@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import type { UIMessage } from "ai";
 import {
-  ExternalLink,
   FileCode,
   FileText,
   FolderTree,
@@ -19,6 +17,7 @@ import {
 import type { GithubRepoLink } from "@/lib/types";
 import { extractPushableFiles, type PushableFile } from "@/lib/codeBlocks";
 import { PushCard } from "@/components/chat/PushCard";
+import { SkillsTab } from "@/components/workspace/SkillsTab";
 
 export type WorkspaceTab = "files" | "changes" | "skills";
 
@@ -345,54 +344,8 @@ export function WorkspaceRail({
           )}
 
           {/* TAB 3: SKILLS */}
-          {tab === "skills" && (
-            <div className="flex h-full flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <p className="text-[11.5px] font-medium text-nimbus-text-faint uppercase tracking-wider">
-                  Session Skills
-                </p>
-                <Link
-                  href="/settings#skills"
-                  className="flex items-center gap-1 text-[11.5px] text-nimbus-accent hover:underline"
-                >
-                  Manage
-                  <ExternalLink aria-hidden className="h-3 w-3" />
-                </Link>
-              </div>
+          {tab === "skills" && <SkillsTab />}
 
-              <div className="flex flex-col gap-2">
-                <div className="rounded-lg border border-nimbus-border bg-nimbus-surface/60 p-2.5">
-                  <div className="flex items-center gap-2">
-                    <Sparkles aria-hidden className="h-3.5 w-3.5 text-nimbus-accent" />
-                    <p className="text-[12.5px] font-medium text-nimbus-text">Repo Explorer</p>
-                  </div>
-                  <p className="mt-1 text-[11.5px] leading-relaxed text-nimbus-text-muted">
-                    Maps project hierarchy, entry points, and dependencies across connected repositories.
-                  </p>
-                </div>
-
-                <div className="rounded-lg border border-nimbus-border bg-nimbus-surface/60 p-2.5">
-                  <div className="flex items-center gap-2">
-                    <FileCode aria-hidden className="h-3.5 w-3.5 text-nimbus-accent" />
-                    <p className="text-[12.5px] font-medium text-nimbus-text">Code Reviewer</p>
-                  </div>
-                  <p className="mt-1 text-[11.5px] leading-relaxed text-nimbus-text-muted">
-                    Audits generated changes for syntax errors, edge cases, and architectural best practices.
-                  </p>
-                </div>
-
-                <div className="rounded-lg border border-nimbus-border bg-nimbus-surface/60 p-2.5">
-                  <div className="flex items-center gap-2">
-                    <GitBranch aria-hidden className="h-3.5 w-3.5 text-nimbus-accent" />
-                    <p className="text-[12.5px] font-medium text-nimbus-text">Atomic Pusher</p>
-                  </div>
-                  <p className="mt-1 text-[11.5px] leading-relaxed text-nimbus-text-muted">
-                    Bundles path-tagged code blocks into a single atomic GitHub commit without extra dependencies.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </aside>
     </>

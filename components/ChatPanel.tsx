@@ -21,6 +21,7 @@ import { PushCard } from "./chat/PushCard";
 import { HermesApprovalCard } from "./chat/HermesApproval";
 import type { HermesApproval } from "@/lib/hermesStream";
 import { Composer } from "./chat/Composer";
+import { SkillsPicker } from "./chat/SkillsPicker";
 import {
   WelcomeBanner,
   WelcomeHero,
@@ -278,6 +279,15 @@ export function ChatPanel({
             .map((c) => ({ url: c.url, authHeader: c.authHeader })),
           githubRepo: repoRef.current,
           plan: planRef.current,
+          skills: (() => {
+            if (typeof window === "undefined") return [];
+            try {
+              const raw = localStorage.getItem("aro-installed-skills");
+              return raw ? JSON.parse(raw) : [];
+            } catch {
+              return [];
+            }
+          })(),
           };
         },
       })
@@ -737,6 +747,7 @@ export function ChatPanel({
         <ListChecks aria-hidden className="h-3.5 w-3.5" />
         Plan
       </button>
+      <SkillsPicker onOpenSkillsTab={mode === "code" ? () => setWorkspaceOpen(true) : undefined} />
       {mode === "code" && (
         <button
           type="button"
