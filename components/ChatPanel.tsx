@@ -34,7 +34,9 @@ import { CHIP } from "./ui/classes";
 import { extractPushableFiles } from "@/lib/codeBlocks";
 import type { McpConnector } from "@/lib/mcp";
 import type { AgentOptions, Conversation, GithubRepoLink } from "@/lib/types";
+import { useToast } from "./Toaster";
 import {
+  createConversation,
   loadModelSource,
   loadConversations,
   saveConversations,
@@ -321,7 +323,8 @@ export function ChatPanel({
   );
   /* eslint-enable react-hooks/refs */
 
-  const { messages, sendMessage, status, error, regenerate, stop } = useChat({
+  const toast = useToast();
+  const { messages, setMessages, sendMessage, status, error, regenerate, stop } = useChat({
     id: conversationId,
     messages: initialMessages,
     transport,
@@ -595,6 +598,84 @@ export function ChatPanel({
     setAttachment(null);
     setAttachError(null);
   }
+
+  const handleRestoreCheckpoint = (messageIndex: number) => {
+    if (messageIndex < 0 || messageIndex >= messages.length) return;
+    const truncated = messages.slice(0, messageIndex + 1);
+    setMessages(truncated);
+    if (typeof window !== "undefined") {
+      const all = loadConversations();
+      const updated = all.map((c) => (c.id === conversationId ? { ...c, messages: truncated } : c));
+      saveConversations(updated);
+    }
+    toast({ title: "Restored conversation to this checkpoint.", tone: "success" });
+  };
+
+  const handleSlashCommand = async (cmd: "plan" | "clear" | "compact" | "model" | "skills" | "new") => {
+    switch (cmd) {
+      case "plan": {
+        setPlan((prev) => {
+          const next = !prev;
+          toast({ title: next ? "Plan mode enabled" : "Plan mode disabled", tone: "info" });
+          return next;
+        });
+        break;
+      }
+      case "clear": {
+        setMessages([]);
+        if (typeof window !== "undefined") {
+          const all = loadConversations();
+          const updated = all.map((c) => (c.id === conversationId ? { ...c, messages: [] } : c));
+          saveConversations(updated);
+        }
+        toast({ title: "Conversation cleared", tone: "info" });
+        break;
+      }
+      case "compact": {
+        if (messages.length === 0) {
+          toast({ title: "No messages to compact", tone: "info" });
+          return;
+        }
+        try {
+          toast({ title: "Compacting conversation...", tone: "info" });
+          const res = await fetch("/api/chat/summary", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages, model }),
+          });
+          if (!res.ok) throw new Error("Compaction failed");
+          const { summary } = (await res.json()) as { summary: string };
+          toast({ title: "Summary generated: creating continuation", tone: "success" });
+          void autoSwitchConversation(summary);
+        } catch {
+          toast({ title: "Failed to compact conversation", tone: "error" });
+        }
+        break;
+      }
+      case "model": {
+        const btn = document.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]');
+        btn?.click();
+        break;
+      }
+      case "skills": {
+        if (mode === "code") {
+          setWorkspaceOpen(true);
+        } else {
+          toast({ title: "Skills can be configured in the controls bar or in Coding sessions", tone: "info" });
+        }
+        break;
+      }
+      case "new": {
+        if (typeof window !== "undefined") {
+          const newConv = createConversation(model, { mode });
+          const all = loadConversations();
+          saveConversations([newConv, ...all]);
+          onSelectConversation(newConv.id);
+        }
+        break;
+      }
+    }
+  };
 
   async function attachFile(file: File | undefined) {
     if (!file || !canEditImages) return;
@@ -1000,6 +1081,7 @@ export function ChatPanel({
                         text={textOf(message)}
                         showRegenerate={isLast && !isStreaming}
                         onRegenerate={retry}
+                        onRestore={() => handleRestoreCheckpoint(messages.findIndex((m) => m.id === message.id))}
                       />
                     )}
 
@@ -1116,6 +1198,7 @@ export function ChatPanel({
             onRemoveAttachment={() => setAttachment(null)}
             dragging={dragging}
             contextUsage={contextUsage}
+            onSlashCommand={handleSlashCommand}
           />
 
           {!isEmpty && (

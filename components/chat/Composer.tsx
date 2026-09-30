@@ -5,6 +5,7 @@ import { ArrowUp, Loader2, Paperclip, Square, X } from "lucide-react";
 import { gsap, useGSAP, reducedMotion } from "@/lib/motion";
 import { ACCEPTED_IMAGE_TYPES, type PreparedImage } from "@/lib/imageResize";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+import { SlashCommandMenu, type SlashCommand } from "./SlashCommandMenu";
 
 const MAX_TEXTAREA_PX = 220;
 
@@ -32,6 +33,7 @@ export const Composer = forwardRef<
     onRemoveAttachment: () => void;
     dragging: boolean;
     contextUsage?: { tokens: number; limit: number; percent: number; level: "normal" | "warning" | "danger" } | null;
+    onSlashCommand?: (command: SlashCommand["id"]) => void;
   }
 >(function Composer(
   {
@@ -52,6 +54,7 @@ export const Composer = forwardRef<
     onRemoveAttachment,
     dragging,
     contextUsage,
+    onSlashCommand,
   },
   ref
 ) {
@@ -85,12 +88,26 @@ export const Composer = forwardRef<
     { dependencies: [streaming] }
   );
 
+  const showSlashMenu = value.startsWith("/") && !value.slice(1).includes(" ");
+
+  const handleSlashSelect = (cmd: SlashCommand["id"]) => {
+    onValueChange("");
+    onSlashCommand?.(cmd);
+  };
+
   return (
     <div
       ref={ref}
       data-dragging={dragging || undefined}
       className="group/composer relative rounded-[16px] border border-nimbus-border-strong bg-nimbus-surface shadow-[var(--nimbus-inset-highlight),var(--nimbus-shadow)] transition-[border-color,box-shadow] duration-300 focus-within:border-nimbus-accent/50 focus-within:shadow-[0_0_0_4px_var(--nimbus-accent-soft),var(--nimbus-shadow)] data-[dragging]:border-nimbus-accent data-[dragging]:shadow-[0_0_0_4px_var(--nimbus-accent-soft)]"
     >
+      {showSlashMenu && (
+        <SlashCommandMenu
+          query={value}
+          onSelect={handleSlashSelect}
+          onClose={() => onValueChange("")}
+        />
+      )}
       {contextUsage && contextUsage.percent > 5 && (
         <div
           role="progressbar"
