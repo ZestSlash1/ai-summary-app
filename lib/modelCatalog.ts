@@ -1,5 +1,5 @@
 import { hermesEndpoint, hermesFetch } from "./hermes";
-import { omnirouteEndpoint } from "./omniroute";
+import { isOmniRouteChatModel, omnirouteEndpoint } from "./omniroute";
 
 export type ModelOption = {
   id: string;
@@ -16,6 +16,7 @@ type GatewayModel = {
 
 type OmniRouteModel = {
   id: string;
+  type?: string;
 };
 
 export async function fetchGatewayModels(): Promise<ModelOption[]> {
@@ -53,6 +54,7 @@ export async function fetchOmniRouteModels(): Promise<ModelOption[]> {
   const body = (await res.json()) as { data: OmniRouteModel[] };
   const seen = new Set<string>();
   return body.data
+    .filter(isOmniRouteChatModel)
     .filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true))) // OmniRoute's own list contains real duplicate ids
     .map((m) => ({
       id: m.id,

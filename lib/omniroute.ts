@@ -10,6 +10,14 @@
 
 export type OmniRouteEndpoint = { baseURL: string; apiKey?: string };
 
+// OmniRoute lists image, video, audio, embedding, rerank, and moderation models in the same
+// /v1/models catalog, marked by type. ARO can only chat, so the picker leaves those out.
+const NON_CHAT_TYPES = new Set(["image", "video", "audio", "embedding", "rerank", "moderation"]);
+
+export function isOmniRouteChatModel(model: { type?: string }): boolean {
+  return !NON_CHAT_TYPES.has(model.type ?? "");
+}
+
 export function omnirouteEndpoint(env: Record<string, string | undefined> = process.env): OmniRouteEndpoint | null {
   const direct = env.OMNIROUTE_BASE_URL;
   if (direct) return { baseURL: direct.replace(/\/$/, ""), apiKey: env.OMNIROUTE_API_KEY || undefined };
