@@ -69,7 +69,7 @@ function chatErrorText(err: Error, source: ModelSource): string {
   } catch {
     // Not JSON: use the message as is.
   }
-  if (/sign in|not allowed|GPU|image edit|Hermes/i.test(text)) return text;
+  if (/sign in|not allowed|GPU|image edit|Hermes|could not run/i.test(text)) return text;
   if (source === "bonsai") {
     return "Bonsai did not respond. Check that the home PC is on (Settings shows its state), then try again.";
   }
