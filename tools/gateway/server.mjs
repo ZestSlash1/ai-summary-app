@@ -4,6 +4,7 @@
 //   /v1/*     -> llama-server (Bonsai), allowlisted paths only
 //   /comfy/*  -> ComfyUI, allowlisted paths only
 //   /hermes/* -> Hermes Agent's API server (in WSL), allowlisted paths only
+//   /omniroute/* -> OmniRoute, the model list and chat only
 // Every request needs "Authorization: Bearer <ARO_GATEWAY_TOKEN>". Upstreams get their own
 // keys from this process, so the tunnel token never reaches them and theirs never leave.
 // It also arbitrates the single 12 GB GPU: while an image job runs, chat requests get 503,
@@ -48,6 +49,9 @@ export function loadConfig(env = {}) {
     // Where Hermes reads skills from. For Hermes in WSL that is a \\wsl.localhost\ path, not the
     // Windows home folder. Empty means "Install to Hermes" is off and answers 503.
     hermesSkillsDir: e.HERMES_SKILLS_DIR || '',
+    omniroute: (e.OMNIROUTE_URL || 'http://127.0.0.1:20128').replace(/\/$/, ''),
+    // OmniRoute's own API key, if it is set to require one. Empty sends none.
+    omnirouteKey: e.OMNIROUTE_API_KEY || '',
     // 'sleep': wait for llama-server to sleep before an image job. 'off': no GPU arbitration.
     gpuMode: e.GPU_ARBITRATION || 'sleep',
     maxBodyBytes: Number(e.MAX_BODY_BYTES || 20 * 1024 * 1024),
@@ -86,6 +90,12 @@ const HERMES_ALLOW = [
   ['GET', new RegExp(`^/v1/runs/${RUN_ID}$`)],
   ['GET', new RegExp(`^/v1/runs/${RUN_ID}/events$`)],
   ['POST', new RegExp(`^/v1/runs/${RUN_ID}/(stop|approval)$`)],
+];
+// OmniRoute holds the owner's provider accounts, and its dashboard and /api routes hand out
+// their keys without a login, so only what ARO uses is reachable: the model list and chat.
+const OMNIROUTE_ALLOW = [
+  ['GET', /^\/v1\/models$/],
+  ['POST', /^\/v1\/chat\/completions$/],
 ];
 // Chat-shaped llama routes that need the GPU (everything except listing models).
 const LLAMA_GPU = /^\/v1\/(chat\/)?completions$/;
@@ -211,6 +221,10 @@ export function createGateway(cfg) {
 
   function llamaAuth() {
     return cfg.llamaKey ? { authorization: `Bearer ${cfg.llamaKey}` } : {};
+  }
+
+  function omnirouteAuth() {
+    return cfg.omnirouteKey ? { authorization: `Bearer ${cfg.omnirouteKey}` } : {};
   }
 
   async function comfyIdle() {
@@ -374,6 +388,13 @@ export function createGateway(cfg) {
       return proxy(req, res, cfg.hermes, sub + search, hermesAuth());
     }
 
+    // ---- OmniRoute
+    if (pathname.startsWith('/omniroute/')) {
+      const sub = pathname.slice('/omniroute'.length);
+      if (!allowed(OMNIROUTE_ALLOW, req.method, sub)) return json(res, 404, { error: { message: 'Not found.' } });
+      return proxy(req, res, cfg.omniroute, sub + search, omnirouteAuth());
+    }
+
     // ---- Hermes skill installation (skill-install.mjs explains the guards)
     if (pathname === '/hermes-skills/install' && req.method === 'POST') {
       let body;
@@ -474,7 +495,7 @@ if (isMain) {
   const server = createGateway(cfg);
   server.listen(cfg.port, cfg.host, () => {
     console.log(
-      `ARO gateway on http://${cfg.host}:${cfg.port}  llama=${cfg.llama}  comfy=${cfg.comfy}  hermes=${cfg.hermesKey ? cfg.hermes : 'off'}  gpu=${cfg.gpuMode}`,
+      `ARO gateway on http://${cfg.host}:${cfg.port}  llama=${cfg.llama}  comfy=${cfg.comfy}  hermes=${cfg.hermesKey ? cfg.hermes : 'off'}  omniroute=${cfg.omniroute}  gpu=${cfg.gpuMode}`,
     );
   });
 }

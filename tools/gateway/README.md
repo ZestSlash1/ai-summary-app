@@ -1,11 +1,12 @@
 # ARO gateway
 
-Small authenticated proxy in front of Bonsai (llama-server) and ComfyUI. Only this process is exposed through the tunnel.
+Small authenticated proxy in front of Bonsai (llama-server), ComfyUI, Hermes, and OmniRoute. Only this process is exposed through the tunnel.
 No dependencies, Node 20+.
 
 ```
-tunnel -> 127.0.0.1:8787 (this gateway) -> /v1/*    -> llama-server 127.0.0.1:8090
-                                        -> /comfy/* -> ComfyUI      127.0.0.1:8188 (allowlist only)
+tunnel -> 127.0.0.1:8787 (this gateway) -> /v1/*        -> llama-server 127.0.0.1:8090
+                                        -> /comfy/*     -> ComfyUI      127.0.0.1:8188 (allowlist only)
+                                        -> /omniroute/* -> OmniRoute    127.0.0.1:20128 (model list and chat only)
 ```
 
 ## Config
@@ -21,6 +22,8 @@ Copy values into `tools/gateway/.env.gateway` (git-ignored by the root `.env*` r
 | `HERMES_URL` | `http://127.0.0.1:8642` | Hermes Agent's API server (run `hermes gateway` in WSL) |
 | `HERMES_API_KEY` | empty | Hermes's `API_SERVER_KEY`. Empty means Hermes is off and `/hermes/*` answers 503 |
 | `HERMES_SKILLS_DIR` | empty | Folder Hermes reads skills from. For Hermes in WSL use the `\\wsl.localhost\Ubuntu\home\<user>\.hermes\skills` path, not the Windows home folder. Empty turns "Install to Hermes" off (503). Skills ARO did not install are never overwritten |
+| `OMNIROUTE_URL` | `http://127.0.0.1:20128` | OmniRoute |
+| `OMNIROUTE_API_KEY` | empty | If OmniRoute requires an API key, the gateway sends this instead of the client token |
 | `GPU_ARBITRATION` | `sleep` | `sleep`: image jobs wait for llama-server to sleep. `off`: no arbitration |
 | `SLEEP_WAIT_MS` | 60000 | How long an image job waits for Bonsai to release the GPU |
 | `JOB_TIMEOUT_MS` | 300000 | Longest an image job can hold the GPU lock |
@@ -71,10 +74,17 @@ COMFYUI_BASE_URL=https://<public-url>/comfy
 COMFYUI_API_KEY=<ARO_GATEWAY_TOKEN>
 ```
 
+OmniRoute needs nothing more: with `OMNIROUTE_BASE_URL` unset, ARO reaches it at `https://<public-url>/omniroute/v1`
+with `BONSAI_API_KEY`. Only local development sets `OMNIROUTE_BASE_URL=http://localhost:20128/v1`.
+
+Never publish OmniRoute's own port (no ngrok, Funnel, or Cloudflare tunnel to 20128). Its dashboard and `/api` routes
+answer without a login, and `/api/providers` returns every provider key.
+
 ## What is allowed
 
 - `POST /v1/chat/completions`, `POST /v1/completions`, `GET /v1/models`
 - `POST /comfy/upload/image`, `POST /comfy/prompt`, `GET /comfy/history/{id}`, `GET /comfy/view`, `POST /comfy/free`, `POST /comfy/interrupt`, `GET /comfy/system_stats`, `GET /comfy/queue`
+- `GET /omniroute/v1/models`, `POST /omniroute/v1/chat/completions`
 - `GET /status` returns `{ bonsai: online|sleeping|busy|offline, comfy: online|busy|offline, ... }`
 
 Everything else is 404. No WebSockets. Paths containing `..`, encoded slashes, backslashes, or `//` are rejected.
