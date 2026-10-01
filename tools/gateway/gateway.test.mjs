@@ -7,6 +7,7 @@ import { createGateway } from './server.mjs';
 const TOKEN = 'test-token-0123456789-abcdefghijkl';
 const LLAMA_KEY = 'llama-secret-value';
 const HERMES_KEY = 'hermes-api-server-key';
+const OMNIROUTE_KEY = 'omniroute-own-key';
 
 function listen(server) {
   return new Promise((r) => server.listen(0, '127.0.0.1', () => r(server.address().port)));
@@ -69,9 +70,18 @@ async function setup(overrides = {}) {
       res.end();
     }, 300);
   });
+  seen.omniroute = [];
+  const omniroute = http.createServer((req, res) => {
+    seen.omniroute.push({ path: `${req.method} ${req.url}`, auth: req.headers.authorization });
+    res.setHeader('content-type', 'application/json');
+    if (req.url === '/v1/models') return res.end(JSON.stringify({ data: [{ id: 'auto/best-free' }] }));
+    req.resume();
+    res.end(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }));
+  });
   const lp = await listen(llama);
   const cp = await listen(comfy);
   const hp = await listen(hermes);
+  const op = await listen(omniroute);
 
   const gw = createGateway({
     host: '127.0.0.1',
@@ -82,6 +92,8 @@ async function setup(overrides = {}) {
     comfy: `http://127.0.0.1:${cp}`,
     hermes: `http://127.0.0.1:${hp}`,
     hermesKey: HERMES_KEY,
+    omniroute: `http://127.0.0.1:${op}`,
+    omnirouteKey: '',
     gpuMode: 'sleep',
     maxBodyBytes: 1024,
     ratePerMinute: 1000,
@@ -97,7 +109,7 @@ async function setup(overrides = {}) {
       headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), 'content-type': 'application/json', ...headers },
       body,
     });
-  const close = () => [gw, llama, comfy, hermes].forEach((s) => (s.closeAllConnections?.(), s.close()));
+  const close = () => [gw, llama, comfy, hermes, omniroute].forEach((s) => (s.closeAllConnections?.(), s.close()));
   return { call, seen, llamaState, comfyState, hermesState, gw, close };
 }
 
@@ -280,6 +292,44 @@ test('hermes: answers 503 when no Hermes key is configured, without calling upst
   assert.equal(r.status, 503);
   assert.equal((await r.json()).error.type, 'hermes_unconfigured');
   assert.equal(t.seen.hermes.length, 0);
+  t.close();
+});
+
+test('omniroute: passes the model list and chat through, never the tunnel token', async () => {
+  const t = await setup();
+  const models = await t.call('GET', '/omniroute/v1/models');
+  assert.equal(models.status, 200);
+  assert.deepEqual((await models.json()).data, [{ id: 'auto/best-free' }]);
+  const chat = await t.call('POST', '/omniroute/v1/chat/completions', { body: '{}' });
+  assert.equal(chat.status, 200);
+  await chat.body?.cancel();
+  assert.deepEqual(t.seen.omniroute.map((o) => o.path), ['GET /v1/models', 'POST /v1/chat/completions']);
+  assert.equal(t.seen.omniroute.some((o) => o.auth), false);
+  t.close();
+});
+
+test('omniroute: sends its own key when one is configured', async () => {
+  const t = await setup({ omnirouteKey: OMNIROUTE_KEY });
+  await (await t.call('GET', '/omniroute/v1/models')).body?.cancel();
+  assert.equal(t.seen.omniroute.at(-1).auth, `Bearer ${OMNIROUTE_KEY}`);
+  t.close();
+});
+
+test('omniroute: the dashboard, provider keys, and everything else stay local', async () => {
+  const t = await setup();
+  for (const [m, p] of [
+    ['GET', '/omniroute/api/providers'],
+    ['GET', '/omniroute/api/settings'],
+    ['GET', '/omniroute/dashboard'],
+    ['POST', '/omniroute/v1/embeddings'],
+    ['GET', '/omniroute/v1/chat/completions'],
+  ]) {
+    const r = await t.call(m, p);
+    await r.body?.cancel();
+    assert.equal(r.status, 404, `${m} ${p}`);
+  }
+  assert.equal((await t.call('GET', '/omniroute/v1/models', { token: null })).status, 401);
+  assert.deepEqual(t.seen.omniroute, []);
   t.close();
 });
 

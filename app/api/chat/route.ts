@@ -25,6 +25,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { isPublicHttpUrl } from '@/lib/safeUrl';
 import { mergeMcpToolSets } from '@/lib/mcp';
 import { hermesChatResponse } from '@/lib/hermesChat';
+import { omnirouteEndpoint } from '@/lib/omniroute';
 import { pruneOldTurns } from '@/lib/historyPruning';
 import { PROMPT_OVERHEAD_TOKENS, estimateConversationTokens, getModelContextLimit } from '@/lib/tokenEstimate';
 import { fetchBonsaiContext } from '@/lib/bonsaiContext';
@@ -89,15 +90,11 @@ function resolveModel(model: string, source: ModelSource | undefined) {
   }
   if (source === 'omniroute') {
     if (!omniroute) {
-      const baseURL = process.env.OMNIROUTE_BASE_URL;
-      if (!baseURL) {
-        throw new Error('OmniRoute is not configured (OMNIROUTE_BASE_URL missing).');
+      const endpoint = omnirouteEndpoint();
+      if (!endpoint) {
+        throw new Error('OmniRoute is not configured (no OMNIROUTE_BASE_URL, and no BONSAI_BASE_URL for the home gateway).');
       }
-      omniroute = createOpenAICompatible({
-        name: 'omniroute',
-        baseURL,
-        apiKey: process.env.OMNIROUTE_API_KEY,
-      });
+      omniroute = createOpenAICompatible({ name: 'omniroute', ...endpoint });
     }
     return omniroute(model);
   }
