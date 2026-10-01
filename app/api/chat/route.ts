@@ -29,7 +29,8 @@ import { pruneOldTurns } from '@/lib/historyPruning';
 import { PROMPT_OVERHEAD_TOKENS, estimateConversationTokens, getModelContextLimit } from '@/lib/tokenEstimate';
 import { fetchBonsaiContext } from '@/lib/bonsaiContext';
 import { handoffPrompt, splitSystemMessages } from '@/lib/handoff';
-import { parseModelRef, toModelRef } from '@/lib/modelRef';
+import { parseModelRef, toModelRef, SOURCE_INFO } from '@/lib/modelRef';
+import { modelErrorMessage } from '@/lib/chatError';
 
 // Bonsai answers at about 33 tokens a second and a repo question takes several tool steps,
 // so give a turn the full five minutes Vercel allows on every plan (Fluid compute).
@@ -463,10 +464,14 @@ export async function POST(request: Request) {
 
   return result.toUIMessageStreamResponse({
     // By default the client only sees a generic error. Say so when the GPU is in use by an
-    // image edit; everything else stays generic so provider details never reach the browser.
-    onError: (err) =>
-      /image edit is using the GPU|gpu_busy/i.test(err instanceof Error ? err.message : '')
-        ? 'An image edit is using the GPU. Try again in a minute.'
-        : 'Something went wrong. Try again.',
+    // image edit, and name the model when a cloud provider refuses it (with the provider's
+    // reason for allow-listed users only). Bonsai stays generic: ChatPanel says to check the PC.
+    onError: (err) => {
+      if (/image edit is using the GPU|gpu_busy/i.test(err instanceof Error ? err.message : '')) {
+        return 'An image edit is using the GPU. Try again in a minute.';
+      }
+      if (parsedRef.source === 'bonsai') return 'Something went wrong. Try again.';
+      return modelErrorMessage(err, SOURCE_INFO[parsedRef.source].name, parsedRef.id, canUseBonsai(session));
+    },
   });
 }
