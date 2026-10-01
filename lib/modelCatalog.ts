@@ -1,4 +1,5 @@
 import { hermesEndpoint, hermesFetch } from "./hermes";
+import { omnirouteEndpoint } from "./omniroute";
 
 export type ModelOption = {
   id: string;
@@ -38,13 +39,13 @@ export async function fetchGatewayModels(): Promise<ModelOption[]> {
 }
 
 export async function fetchOmniRouteModels(): Promise<ModelOption[]> {
-  const baseURL = process.env.OMNIROUTE_BASE_URL;
-  if (!baseURL) throw new Error("OmniRoute is not configured.");
+  const endpoint = omnirouteEndpoint();
+  if (!endpoint) throw new Error("OmniRoute is not configured.");
 
-  const res = await fetch(`${baseURL}/models`, {
-    headers: process.env.OMNIROUTE_API_KEY
-      ? { Authorization: `Bearer ${process.env.OMNIROUTE_API_KEY}` }
-      : undefined,
+  const res = await fetch(`${endpoint.baseURL}/models`, {
+    headers: endpoint.apiKey ? { Authorization: `Bearer ${endpoint.apiKey}` } : undefined,
+    // It lives on the home PC: when the PC is off, fail fast instead of holding the picker open.
+    signal: AbortSignal.timeout(10_000),
     next: { revalidate: 600 },
   });
   if (!res.ok) throw new Error("Failed to fetch models from OmniRoute.");

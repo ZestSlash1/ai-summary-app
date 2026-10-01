@@ -10,6 +10,7 @@ import { parseModelRef } from '@/lib/modelRef';
 import { FALLBACK_MODEL } from '@/lib/types';
 import type { ModelSource } from '@/lib/storage';
 import { handoffPrompt, splitSystemMessages } from '@/lib/handoff';
+import { omnirouteEndpoint } from '@/lib/omniroute';
 
 export const maxDuration = 300;
 
@@ -36,15 +37,11 @@ function resolveModel(model: string, source: ModelSource | undefined) {
   }
   if (source === 'omniroute') {
     if (!omniroute) {
-      const baseURL = process.env.OMNIROUTE_BASE_URL;
-      if (!baseURL) {
-        throw new Error('OmniRoute is not configured (OMNIROUTE_BASE_URL missing).');
+      const endpoint = omnirouteEndpoint();
+      if (!endpoint) {
+        throw new Error('OmniRoute is not configured (no OMNIROUTE_BASE_URL, and no BONSAI_BASE_URL for the home gateway).');
       }
-      omniroute = createOpenAICompatible({
-        name: 'omniroute',
-        baseURL,
-        apiKey: process.env.OMNIROUTE_API_KEY,
-      });
+      omniroute = createOpenAICompatible({ name: 'omniroute', ...endpoint });
     }
     return omniroute(model);
   }
