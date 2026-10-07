@@ -34,6 +34,18 @@ export function applyTheme(theme: Theme) {
   document.documentElement.setAttribute("data-theme", theme);
 }
 
+/** Light theme when the surface behind `el` is bright. Reads the resolved color, so it also
+ * follows "system". Canvases call this to pick a palette. */
+export function surfaceIsLight(el: HTMLElement | null): boolean {
+  for (let node = el; node; node = node.parentElement) {
+    const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(getComputedStyle(node).backgroundColor);
+    if (m && (m[4] === undefined || Number(m[4]) > 0.5)) {
+      return (0.2126 * +m[1] + 0.7152 * +m[2] + 0.0722 * +m[3]) / 255 > 0.5;
+    }
+  }
+  return false;
+}
+
 /** Inline script run before hydration so the first paint already has the right theme. */
 export const THEME_INIT_SCRIPT = `
 (function () {

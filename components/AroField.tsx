@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type RefObject } from "react";
 import { gsap, reducedMotion } from "@/lib/motion";
-import { THEME_EVENT } from "@/lib/theme";
+import { THEME_EVENT, surfaceIsLight } from "@/lib/theme";
 
 /**
  * ARO's ambient field, the sibling of getsourced.dev's pipeline hero. Particles stand for
@@ -53,17 +53,6 @@ function makeSprite(color: string): HTMLCanvasElement {
   g.fillStyle = grad;
   g.fillRect(0, 0, SPRITE_PX, SPRITE_PX);
   return c;
-}
-
-/** Light theme when the surface behind the canvas is bright. Reads the resolved color. */
-function surfaceIsLight(el: HTMLElement | null): boolean {
-  for (let node = el; node; node = node.parentElement) {
-    const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(getComputedStyle(node).backgroundColor);
-    if (m && (m[4] === undefined || Number(m[4]) > 0.5)) {
-      return (0.2126 * +m[1] + 0.7152 * +m[2] + 0.0722 * +m[3]) / 255 > 0.5;
-    }
-  }
-  return false;
 }
 
 export function AroField({
