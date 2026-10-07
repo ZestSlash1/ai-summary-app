@@ -14,10 +14,10 @@ import { after } from 'next/server';
 import { auth } from '@/auth';
 import { retrieveMemory } from '@/lib/memory';
 import { getUserSkills, logSignalAndMaybePropose, messageMatchesKnownSkill } from '@/lib/skillDiscovery';
-import { fetchGatewayModels, fetchOmniRouteModels, fetchBonsaiModels } from '@/lib/modelCatalog';
+import { fetchGatewayModels, fetchOmniRouteModels, fetchBonsaiModels, fetchCloudModels } from '@/lib/modelCatalog';
 import { FALLBACK_MODEL, type AgentOptions } from '@/lib/types';
 import { safeEvaluate } from '@/lib/calc';
-import { canUseBonsai, bonsaiDenied } from '@/lib/access';
+import { canUseBonsai, bonsaiDenied, paidModelDenied } from '@/lib/access';
 import { comfy, friendlyComfyError } from '@/lib/comfy';
 import { extractLatestImage } from '@/lib/imageParts';
 import { createRepoTools, repoSystemPrompt } from '@/lib/repoTools';
@@ -183,6 +183,37 @@ export async function POST(request: Request) {
       customInstructions,
     });
   }
+
+  // This only fires when the client sent no model at all -- every normal
+  // new-conversation path resolves a real one up front. Kept as a genuine
+  // last resort: pick whatever's actually free in the live catalog instead
+  // of a hardcoded id that can silently rot.
+  async function resolveDefaultModel(): Promise<string> {
+    try {
+      let models;
+      if (modelSource === 'bonsai') {
+        models = await fetchBonsaiModels();
+      } else if (modelSource === 'omniroute') {
+        models = await fetchOmniRouteModels();
+      } else {
+        models = await fetchGatewayModels();
+      }
+      const free = models.find((m) => m.free);
+      return (free ?? models[0])?.id ?? (modelSource === 'bonsai' ? 'bonsai-2-27b' : FALLBACK_MODEL);
+    } catch {
+      if (modelSource === 'bonsai') return 'bonsai-2-27b';
+      return modelSource === 'omniroute' ? 'auto/best-free' : FALLBACK_MODEL;
+    }
+  }
+
+  const resolvedModelId = model || (await resolveDefaultModel());
+  // Paid models bill the owner's accounts: checked against the catalog the model is sent to
+  // (resolveModel below), before any other work. Bonsai was checked above and is free.
+  if (modelSource !== 'bonsai') {
+    const denied = await paidModelDenied(session, resolvedModelId, () => fetchCloudModels(modelSource));
+    if (denied) return denied;
+  }
+
   const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
   const lastUserText = lastUserMessage ? textOf(lastUserMessage) : '';
 
@@ -375,29 +406,6 @@ export async function POST(request: Request) {
     }
   }
 
-  // This only fires when the client sent no model at all -- every normal
-  // new-conversation path resolves a real one up front. Kept as a genuine
-  // last resort: pick whatever's actually free in the live catalog instead
-  // of a hardcoded id that can silently rot.
-  async function resolveDefaultModel(): Promise<string> {
-    try {
-      let models;
-      if (modelSource === 'bonsai') {
-        models = await fetchBonsaiModels();
-      } else if (modelSource === 'omniroute') {
-        models = await fetchOmniRouteModels();
-      } else {
-        models = await fetchGatewayModels();
-      }
-      const free = models.find((m) => m.free);
-      return (free ?? models[0])?.id ?? (modelSource === 'bonsai' ? 'bonsai-2-27b' : FALLBACK_MODEL);
-    } catch {
-      if (modelSource === 'bonsai') return 'bonsai-2-27b';
-      return modelSource === 'omniroute' ? 'auto/best-free' : FALLBACK_MODEL;
-    }
-  }
-
-  const resolvedModelId = model || (await resolveDefaultModel());
   const parsedRef = parseModelRef(resolvedModelId, modelSource || 'gateway');
   const qualifiedModelRef = toModelRef(parsedRef.source, parsedRef.id);
   // Bonsai's window is whatever the home server was started with, so ask the gateway for it.

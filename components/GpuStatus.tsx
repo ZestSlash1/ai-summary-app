@@ -6,13 +6,25 @@ import { useHomeGpu, bonsaiState, type GpuState } from "@/lib/useHomeGpu";
 import { GithubMark } from "./BrandMark";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY } from "./ui/classes";
 
+const ACCESS_COPY = {
+  bonsai: {
+    signedOut: "Bonsai and image editing run on the owner's home PC. Sign in with an allowed GitHub account to use them.",
+    notAllowed: "This GitHub account is not on the allow list for Bonsai and image editing.",
+  },
+  paid: {
+    signedOut: "Paid models are billed to the owner's accounts. Sign in with an allowed GitHub account to use them.",
+    notAllowed: "This GitHub account is not on the allow list for paid models. Models marked Free work for everyone.",
+  },
+} as const;
+
 /**
- * Why Bonsai is locked, and the way in: signed out, sign in; signed in but not on the
- * allow list, say so plainly instead of hiding the option.
+ * Why something is locked (Bonsai, or paid models), and the way in: signed out, sign in;
+ * signed in but not on the allow list, say so plainly instead of hiding the option.
  */
-export function BonsaiAccessNote({ compact = false }: { compact?: boolean }) {
+export function AccessNote({ subject = "bonsai", compact = false }: { subject?: keyof typeof ACCESS_COPY; compact?: boolean }) {
   const { status } = useSession();
   const signedOut = status !== "authenticated";
+  const copy = ACCESS_COPY[subject];
   return (
     <div
       className={`flex items-start gap-2.5 rounded-[10px] border border-nimbus-border bg-nimbus-panel ${
@@ -22,9 +34,7 @@ export function BonsaiAccessNote({ compact = false }: { compact?: boolean }) {
       <Lock aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-nimbus-text-muted" />
       <div className="min-w-0 flex-1">
         <p className="text-[12.5px] leading-relaxed text-nimbus-text-muted">
-          {signedOut
-            ? "Bonsai and image editing run on the owner's home PC. Sign in with an allowed GitHub account to use them."
-            : "This GitHub account is not on the allow list for Bonsai and image editing."}
+          {signedOut ? copy.signedOut : copy.notAllowed}
         </p>
         {signedOut && (
           <button type="button" onClick={() => signIn("github")} className={`${BUTTON_PRIMARY} mt-2 h-8 px-3 text-[12.5px]`}>
@@ -84,7 +94,7 @@ function StateRow({
 export function GpuStatusPanel() {
   const { allowed, status, checking, refresh } = useHomeGpu({ pollMs: 15_000 });
 
-  if (allowed === false) return <BonsaiAccessNote />;
+  if (allowed === false) return <AccessNote />;
 
   if (!status) {
     return (
