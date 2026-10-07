@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport, type ChatStatus, type UIMessage } from "ai";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { ArrowDown, Brain, ChevronRight, ImagePlus, Layers, ListChecks, RotateCw } from "lucide-react";
 import { gsap, useGSAP, Flip, iconWiggle, reducedMotion } from "@/lib/motion";
@@ -14,6 +14,7 @@ import { MessageActions } from "./MessageActions";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { AssistantAvatar } from "./BrandMark";
 import { AroField } from "./AroField";
+import { AroGlow, type GlowPhase } from "./AroGlow";
 import { ImageJobCard } from "./ImageJobCard";
 import { MessageText } from "./chat/Markdown";
 import { ToolActivity, type ToolCall } from "./chat/ToolActivity";
@@ -145,6 +146,20 @@ function toBlocks(parts: Part[]): Block[] {
   });
   flush();
   return blocks;
+}
+
+/**
+ * Which part of the turn the reply glow shows. It keeps cycling while the model works
+ * (reasoning and tool calls included, as the "Thinking" row does) and lands once the reply
+ * has something for the user: words, a picture, or an approval to give.
+ */
+function glowPhaseFor(status: ChatStatus, last: UIMessage | undefined): GlowPhase {
+  if (status === "submitted") return "thinking";
+  if (status !== "streaming") return "idle";
+  const answered =
+    last?.role === "assistant" &&
+    toBlocks(last.parts).some((b) => b.kind === "text" || b.kind === "image" || b.kind === "approval");
+  return answered ? "answering" : "thinking";
 }
 
 /** The model's private reasoning, folded away by default. Opens and closes with a height tween. */
@@ -339,6 +354,7 @@ export function ChatPanel({
   const isEmpty = messages.length === 0;
   const lastMessage = messages[messages.length - 1];
   const awaitingReply = isStreaming && lastMessage?.role === "user";
+  const glowPhase = glowPhaseFor(status, lastMessage);
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
   const lastUserText = useMemo(() => {
     const last = [...messages].reverse().find((m) => m.role === "user");
@@ -917,6 +933,8 @@ export function ChatPanel({
         />
         {/* Ambient particles behind the welcome screen; fades away once the chat starts. */}
         <AroField active={isEmpty && active} scopeRef={containerRef} />
+        {/* Light behind the thread while a reply is on its way; see lib/aroGlow.ts. */}
+        <AroGlow phase={glowPhase} />
 
       {isEmpty && (
         <div className="absolute inset-x-0 top-4 z-10 flex justify-center">
