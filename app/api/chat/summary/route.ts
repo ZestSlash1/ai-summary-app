@@ -19,8 +19,23 @@ export const SUMMARY_PROMPT =
 
 let omniroute: ReturnType<typeof createOpenAICompatible> | null = null;
 let bonsai: ReturnType<typeof createOpenAICompatible> | null = null;
+let ollama: ReturnType<typeof createOpenAICompatible> | null = null;
 
 function resolveModel(model: string, source: ModelSource | undefined) {
+  if (source === 'ollama') {
+    if (!ollama) {
+      const baseURL = process.env.OLLAMA_BASE_URL;
+      if (!baseURL) {
+        throw new Error('Ollama is not configured (OLLAMA_BASE_URL missing).');
+      }
+      ollama = createOpenAICompatible({
+        name: 'ollama',
+        baseURL,
+        apiKey: process.env.OLLAMA_API_KEY,
+      });
+    }
+    return ollama(model);
+  }
   if (source === 'bonsai') {
     if (!bonsai) {
       const baseURL = process.env.BONSAI_BASE_URL;
@@ -87,6 +102,9 @@ export async function POST(request: Request) {
     const session = await auth();
     if (modelRef.source === 'bonsai' && !canUseBonsai(session)) {
       return bonsaiDenied(session);
+    }
+    if (modelRef.source === 'ollama' && !canUseBonsai(session)) {
+      return bonsaiDenied(session, 'Ollama');
     }
     if (modelRef.source === 'hermes') {
       // Hermes is an agent with tools: sending it a transcript would run a full agent turn

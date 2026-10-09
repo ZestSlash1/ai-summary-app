@@ -11,7 +11,7 @@ function pick(value: unknown): GpuState {
   return STATES.includes(value as GpuState) ? (value as GpuState) : "offline";
 }
 
-const OFFLINE = { bonsai: "offline", comfy: "offline", imageBusy: false, hermes: "offline" } as const;
+const OFFLINE = { bonsai: "offline", comfy: "offline", imageBusy: false, hermes: "offline", ollama: "offline" } as const;
 
 type HermesState = "online" | "offline" | "unconfigured";
 function pickHermes(value: unknown): HermesState {
@@ -44,6 +44,8 @@ export async function GET() {
       comfy: pick(body.comfy),
       imageBusy: body.imageBusy === true,
       hermes: body.hermes === undefined ? "unconfigured" : pickHermes(body.hermes),
+      // Same three answers as Hermes: an older gateway that does not know Ollama says nothing.
+      ollama: body.ollama === undefined ? "unconfigured" : pickHermes(body.ollama),
     });
   } catch {
     // PC off, tunnel down, or bad token: report it as offline, never as a server error.

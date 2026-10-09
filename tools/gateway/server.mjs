@@ -5,6 +5,7 @@
 //   /comfy/*  -> ComfyUI, allowlisted paths only
 //   /hermes/* -> Hermes Agent's API server (in WSL), allowlisted paths only
 //   /omniroute/* -> OmniRoute, the model list and chat only
+//   /ollama/* -> Ollama's OpenAI-compatible API, the model list and chat only
 // Every request needs "Authorization: Bearer <ARO_GATEWAY_TOKEN>". Upstreams get their own
 // keys from this process, so the tunnel token never reaches them and theirs never leave.
 // It also arbitrates the single 12 GB GPU: while an image job runs, chat requests get 503,
@@ -52,6 +53,8 @@ export function loadConfig(env = {}) {
     omniroute: (e.OMNIROUTE_URL || 'http://127.0.0.1:20128').replace(/\/$/, ''),
     // OmniRoute's own API key, if it is set to require one. Empty sends none.
     omnirouteKey: e.OMNIROUTE_API_KEY || '',
+    // Ollama has no auth of its own, so there is no key to hold. Set OLLAMA_URL=off to turn it off.
+    ollama: e.OLLAMA_URL === 'off' ? '' : (e.OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, ''),
     // 'sleep': wait for llama-server to sleep before an image job. 'off': no GPU arbitration.
     gpuMode: e.GPU_ARBITRATION || 'sleep',
     maxBodyBytes: Number(e.MAX_BODY_BYTES || 20 * 1024 * 1024),
@@ -94,6 +97,12 @@ const HERMES_ALLOW = [
 // OmniRoute holds the owner's provider accounts, and its dashboard and /api routes hand out
 // their keys without a login, so only what ARO uses is reachable: the model list and chat.
 const OMNIROUTE_ALLOW = [
+  ['GET', /^\/v1\/models$/],
+  ['POST', /^\/v1\/chat\/completions$/],
+];
+// Ollama serves OpenAI-style routes under /v1 too. Its native /api routes can pull, copy, and
+// delete models, so they stay local.
+const OLLAMA_ALLOW = [
   ['GET', /^\/v1\/models$/],
   ['POST', /^\/v1\/chat\/completions$/],
 ];
@@ -250,6 +259,37 @@ export function createGateway(cfg) {
     }
   }
 
+  // Ollama keeps a model in VRAM for minutes after the last reply (OLLAMA_KEEP_ALIVE), which
+  // would starve an image job. Asking it to unload what it holds is how the GPU changes hands.
+  async function freeOllama() {
+    if (!cfg.ollama) return;
+    try {
+      const ps = await getJson(`${cfg.ollama}/api/ps`, 2000);
+      await Promise.all(
+        (ps.models ?? []).map((m) =>
+          fetch(`${cfg.ollama}/api/generate`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ model: m.name, keep_alive: 0 }),
+            signal: AbortSignal.timeout(5000),
+          }).then((r) => r.body?.cancel()),
+        ),
+      );
+    } catch {
+      // Ollama gone or slow: nothing left to free.
+    }
+  }
+
+  async function ollamaState() {
+    if (!cfg.ollama) return 'unconfigured';
+    try {
+      await getJson(`${cfg.ollama}/api/version`, 2000);
+      return 'online';
+    } catch {
+      return 'offline';
+    }
+  }
+
   async function watchImageJob() {
     const deadline = Date.now() + cfg.jobTimeoutMs;
     await sleep(cfg.pollMs);
@@ -313,6 +353,29 @@ export function createGateway(cfg) {
     req.pipe(up);
   }
 
+  // A chat that loads a model needs the GPU: refuse while an image job holds it, and count it so
+  // an image job waits for it to finish. Listing models does neither.
+  function gpuProxy(req, res, usesGpu, upstreamBase, upstreamPath, extraHeaders) {
+    if (usesGpu && busy()) {
+      return json(
+        res,
+        503,
+        { error: { message: 'An image edit is using the GPU. Try again shortly.', type: 'gpu_busy' } },
+        { 'retry-after': '5' },
+      );
+    }
+    if (usesGpu) state.activeLlm++;
+    let done = false;
+    const finish = () => {
+      if (usesGpu && !done) {
+        done = true;
+        state.activeLlm = Math.max(0, state.activeLlm - 1);
+      }
+    };
+    res.on('close', finish);
+    return proxy(req, res, upstreamBase, upstreamPath, extraHeaders, finish);
+  }
+
   async function handle(req, res) {
     const t0 = Date.now();
     res.on('finish', () => log(req, res.statusCode, t0));
@@ -339,10 +402,11 @@ export function createGateway(cfg) {
     const { pathname, search } = url;
 
     if (pathname === '/status' && req.method === 'GET') {
-      const [llamaInfo, comfyUp, hermes] = await Promise.all([
+      const [llamaInfo, comfyUp, hermes, ollama] = await Promise.all([
         llamaProps(),
         getJson(`${cfg.comfy}/system_stats`, 2000).then(() => true, () => false),
         hermesState(),
+        ollamaState(),
       ]);
       return json(res, 200, {
         bonsai: llamaInfo === null ? 'offline' : llamaInfo.sleeping ? 'sleeping' : state.activeLlm > 0 ? 'busy' : 'online',
@@ -351,31 +415,24 @@ export function createGateway(cfg) {
         imageBusy: busy(),
         activeChats: state.activeLlm,
         hermes,
+        ollama,
       });
     }
 
     // ---- Bonsai (llama-server)
     if (pathname.startsWith('/v1/')) {
       if (!allowed(LLAMA_ALLOW, req.method, pathname)) return json(res, 404, { error: { message: 'Not found.' } });
-      const gpu = LLAMA_GPU.test(pathname);
-      if (gpu && busy()) {
-        return json(
-          res,
-          503,
-          { error: { message: 'An image edit is using the GPU. Try again shortly.', type: 'gpu_busy' } },
-          { 'retry-after': '5' },
-        );
+      return gpuProxy(req, res, LLAMA_GPU.test(pathname), cfg.llama, pathname + search, llamaAuth());
+    }
+
+    // ---- Ollama
+    if (pathname.startsWith('/ollama/')) {
+      const sub = pathname.slice('/ollama'.length);
+      if (!allowed(OLLAMA_ALLOW, req.method, sub)) return json(res, 404, { error: { message: 'Not found.' } });
+      if (!cfg.ollama) {
+        return json(res, 503, { error: { message: 'Ollama is turned off on this PC.', type: 'ollama_off' } });
       }
-      if (gpu) state.activeLlm++;
-      let done = false;
-      const finish = () => {
-        if (gpu && !done) {
-          done = true;
-          state.activeLlm = Math.max(0, state.activeLlm - 1);
-        }
-      };
-      res.on('close', finish);
-      return proxy(req, res, cfg.llama, pathname + search, llamaAuth(), finish);
+      return gpuProxy(req, res, sub === '/v1/chat/completions', cfg.ollama, sub + search, {});
     }
 
     // ---- Hermes Agent
@@ -458,6 +515,8 @@ export function createGateway(cfg) {
               { 'retry-after': '15' },
             );
           }
+          // Bonsai is asleep and no chat is running; Ollama may still be holding its model.
+          await freeOllama();
         }
         return proxy(req, res, cfg.comfy, sub + search, {}, (status) => {
           if (cfg.gpuMode !== 'sleep') return;
@@ -495,7 +554,7 @@ if (isMain) {
   const server = createGateway(cfg);
   server.listen(cfg.port, cfg.host, () => {
     console.log(
-      `ARO gateway on http://${cfg.host}:${cfg.port}  llama=${cfg.llama}  comfy=${cfg.comfy}  hermes=${cfg.hermesKey ? cfg.hermes : 'off'}  omniroute=${cfg.omniroute}  gpu=${cfg.gpuMode}`,
+      `ARO gateway on http://${cfg.host}:${cfg.port}  llama=${cfg.llama}  comfy=${cfg.comfy}  hermes=${cfg.hermesKey ? cfg.hermes : 'off'}  omniroute=${cfg.omniroute}  ollama=${cfg.ollama || 'off'}  gpu=${cfg.gpuMode}`,
     );
   });
 }

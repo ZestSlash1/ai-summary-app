@@ -30,6 +30,12 @@ const HERMES_NOTE = {
   offline: "Not answering. Start it in WSL with: hermes gateway",
 } as const;
 
+const OLLAMA_NOTE = {
+  online: "Ready. Models load on your GPU when you send a message, and unload after a few idle minutes.",
+  busy: "An image edit is using the GPU. Messages wait their turn.",
+  offline: "Not answering. Turn the home PC on and start Ollama.",
+} as const;
+
 const STATE_DOT: Record<GpuState, string> = {
   online: "bg-nimbus-free",
   sleeping: "bg-nimbus-text-faint",
@@ -94,12 +100,20 @@ export function ModelSwitcher({
 
   // Hermes shows up once the gateway reports it set up (online or not).
   const hermesState = gpu?.hermes && gpu.hermes !== "unconfigured" ? gpu.hermes : null;
+  // Ollama too, once the gateway knows about it. An image edit holds the GPU, so it reads busy.
+  const ollamaState = gpu?.ollama && gpu.ollama !== "unconfigured" ? (gpu.ollama === "online" && gpu.imageBusy ? "busy" : gpu.ollama) : null;
   const sources = useMemo<ModelSource[]>(
     () =>
       homeAllowed
-        ? ["bonsai", ...(hermesState ? (["hermes"] as const) : []), "gateway", "omniroute"]
+        ? [
+            "bonsai",
+            ...(ollamaState ? (["ollama"] as const) : []),
+            ...(hermesState ? (["hermes"] as const) : []),
+            "gateway",
+            "omniroute",
+          ]
         : ["gateway", "omniroute"],
-    [homeAllowed, hermesState]
+    [homeAllowed, hermesState, ollamaState]
   );
 
   useEffect(() => {
@@ -163,6 +177,16 @@ export function ModelSwitcher({
         state,
       });
     }
+    if (homeAllowed && ollamaState) {
+      out.push({
+        key: "ollama",
+        kind: "local",
+        title: "On your PC · Ollama",
+        note: OLLAMA_NOTE[ollamaState],
+        rows: rows("ollama", "local", catalogs.ollama?.models ?? []),
+        state: ollamaState,
+      });
+    }
     if (homeAllowed && hermesState) {
       out.push({
         key: "agent",
@@ -206,7 +230,7 @@ export function ModelSwitcher({
       }
     );
     return out;
-  }, [catalogs, homeAllowed, bonsaiNow, hermesState, gpu]);
+  }, [catalogs, homeAllowed, bonsaiNow, hermesState, ollamaState, gpu]);
 
   const visibleGroups = useMemo(() => {
     const q = query.trim().toLowerCase();

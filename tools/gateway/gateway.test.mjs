@@ -78,10 +78,25 @@ async function setup(overrides = {}) {
     req.resume();
     res.end(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }));
   });
+  seen.ollama = [];
+  const ollamaState = { loaded: ['huihui:latest'], up: true };
+  const ollama = http.createServer((req, res) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      seen.ollama.push({ path: `${req.method} ${req.url}`, auth: req.headers.authorization, body: Buffer.concat(chunks).toString() });
+      res.setHeader('content-type', 'application/json');
+      if (req.url === '/v1/models') return res.end(JSON.stringify({ data: [{ id: 'huihui:latest' }] }));
+      if (req.url === '/api/version') return res.end('{"version":"0.0.0"}');
+      if (req.url === '/api/ps') return res.end(JSON.stringify({ models: ollamaState.loaded.map((name) => ({ name })) }));
+      res.end(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }));
+    });
+  });
   const lp = await listen(llama);
   const cp = await listen(comfy);
   const hp = await listen(hermes);
   const op = await listen(omniroute);
+  const olp = await listen(ollama);
 
   const gw = createGateway({
     host: '127.0.0.1',
@@ -94,6 +109,7 @@ async function setup(overrides = {}) {
     hermesKey: HERMES_KEY,
     omniroute: `http://127.0.0.1:${op}`,
     omnirouteKey: '',
+    ollama: `http://127.0.0.1:${olp}`,
     gpuMode: 'sleep',
     maxBodyBytes: 1024,
     ratePerMinute: 1000,
@@ -109,8 +125,8 @@ async function setup(overrides = {}) {
       headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), 'content-type': 'application/json', ...headers },
       body,
     });
-  const close = () => [gw, llama, comfy, hermes, omniroute].forEach((s) => (s.closeAllConnections?.(), s.close()));
-  return { call, seen, llamaState, comfyState, hermesState, gw, close };
+  const close = () => [gw, llama, comfy, hermes, omniroute, ollama].forEach((s) => (s.closeAllConnections?.(), s.close()));
+  return { call, seen, llamaState, comfyState, hermesState, ollamaState, gw, close };
 }
 
 test('rejects missing and wrong tokens', async () => {
@@ -342,4 +358,80 @@ test('hermes: status reports online, offline, and unconfigured', async () => {
   const u = await setup({ hermesKey: '' });
   assert.equal((await (await u.call('GET', '/status')).json()).hermes, 'unconfigured');
   u.close();
+});
+
+test('ollama: passes the model list and chat through, never the tunnel token', async () => {
+  const t = await setup();
+  const models = await t.call('GET', '/ollama/v1/models');
+  assert.equal(models.status, 200);
+  assert.deepEqual((await models.json()).data, [{ id: 'huihui:latest' }]);
+  const chat = await t.call('POST', '/ollama/v1/chat/completions', { body: '{}' });
+  assert.equal(chat.status, 200);
+  await chat.text();
+  assert.deepEqual(t.seen.ollama.map((o) => o.path), ['GET /v1/models', 'POST /v1/chat/completions']);
+  assert.equal(t.seen.ollama.some((o) => o.auth), false);
+  assert.equal((await t.call('GET', '/ollama/v1/models', { token: null })).status, 401);
+  t.close();
+});
+
+test('ollama: its native API (pull, delete, copy) and everything else stay local', async () => {
+  const t = await setup();
+  for (const [m, p] of [
+    ['POST', '/ollama/api/pull'],
+    ['DELETE', '/ollama/api/delete'],
+    ['POST', '/ollama/api/generate'],
+    ['GET', '/ollama/api/tags'],
+    ['POST', '/ollama/v1/embeddings'],
+    ['GET', '/ollama/v1/chat/completions'],
+  ]) {
+    const r = await t.call(m, p, { body: m === 'GET' ? undefined : '{}' });
+    await r.body?.cancel();
+    assert.equal(r.status, 404, `${m} ${p}`);
+  }
+  assert.deepEqual(t.seen.ollama, []);
+  t.close();
+});
+
+test('ollama: chat shares the GPU with image jobs', async () => {
+  const t = await setup();
+  t.llamaState.sleeping = true;
+  // A running Ollama chat holds the GPU, so an image job is refused.
+  t.gw.state.activeLlm = 1;
+  const refused = await t.call('POST', '/comfy/prompt', { body: '{}' });
+  assert.equal(refused.status, 503);
+  t.gw.state.activeLlm = 0;
+  // An image job holds it, so Ollama chat is refused but listing models still works.
+  t.gw.state.imageBusy = true;
+  t.gw.state.imageSince = Date.now();
+  const chat = await t.call('POST', '/ollama/v1/chat/completions', { body: '{}' });
+  assert.equal(chat.status, 503);
+  assert.equal((await chat.json()).error.type, 'gpu_busy');
+  const models = await t.call('GET', '/ollama/v1/models');
+  assert.equal(models.status, 200);
+  await models.body?.cancel();
+  t.close();
+});
+
+test('ollama: an image job unloads the models Ollama holds first', async () => {
+  const t = await setup();
+  t.llamaState.sleeping = true;
+  const r = await t.call('POST', '/comfy/prompt', { body: '{}' });
+  assert.equal(r.status, 200);
+  await r.text();
+  const unload = t.seen.ollama.find((o) => o.path === 'POST /api/generate');
+  assert.deepEqual(JSON.parse(unload.body), { model: 'huihui:latest', keep_alive: 0 });
+  t.close();
+});
+
+test('ollama: status reports online, offline, and unconfigured', async () => {
+  const t = await setup();
+  assert.equal((await (await t.call('GET', '/status')).json()).ollama, 'online');
+  t.close();
+  const off = await setup({ ollama: 'http://127.0.0.1:9' });
+  assert.equal((await (await off.call('GET', '/status')).json()).ollama, 'offline');
+  off.close();
+  const none = await setup({ ollama: '' });
+  assert.equal((await (await none.call('GET', '/status')).json()).ollama, 'unconfigured');
+  assert.equal((await none.call('POST', '/ollama/v1/chat/completions', { body: '{}' })).status, 503);
+  none.close();
 });

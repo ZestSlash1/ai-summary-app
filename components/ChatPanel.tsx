@@ -74,6 +74,9 @@ function chatErrorText(err: Error, source: ModelSource): string {
   if (source === "bonsai") {
     return "Bonsai did not respond. Check that the home PC is on (Settings shows its state), then try again.";
   }
+  if (source === "ollama") {
+    return "Ollama did not respond. Check that the home PC is on and Ollama is running, then try again.";
+  }
   return "Something went wrong. Try again.";
 }
 

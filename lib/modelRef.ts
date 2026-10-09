@@ -11,7 +11,7 @@ import type { ModelSource } from "./storage";
 export type ModelRef = { source: ModelSource; id: string };
 
 const SEP = "::";
-const SOURCES: readonly ModelSource[] = ["gateway", "omniroute", "bonsai", "hermes"];
+const SOURCES: readonly ModelSource[] = ["gateway", "omniroute", "bonsai", "ollama", "hermes"];
 
 export function isModelSource(value: string): value is ModelSource {
   return (SOURCES as readonly string[]).includes(value);
@@ -40,5 +40,6 @@ export const SOURCE_INFO: Record<ModelSource, { name: string; runs: string; loca
   gateway: { name: "AI Gateway", runs: "Vercel AI Gateway", local: false },
   omniroute: { name: "OmniRoute", runs: "OmniRoute", local: false },
   bonsai: { name: "Bonsai", runs: "the owner's home PC (local)", local: true },
+  ollama: { name: "Ollama", runs: "the owner's home PC (Ollama, local)", local: true },
   hermes: { name: "Hermes", runs: "the owner's home PC (Hermes agent)", local: true },
 };

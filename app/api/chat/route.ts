@@ -69,12 +69,27 @@ Only add a path when the code is meant to be saved as a real file in the user's 
 
 type McpConnectorInput = { name?: string; url: string; authHeader?: string };
 type GithubRepoInput = { owner: string; name: string; branch: string };
-type ModelSource = 'gateway' | 'omniroute' | 'bonsai' | 'hermes';
+type ModelSource = 'gateway' | 'omniroute' | 'bonsai' | 'ollama' | 'hermes';
 
 let omniroute: ReturnType<typeof createOpenAICompatible> | null = null;
 let bonsai: ReturnType<typeof createOpenAICompatible> | null = null;
+let ollama: ReturnType<typeof createOpenAICompatible> | null = null;
 
 function resolveModel(model: string, source: ModelSource | undefined) {
+  if (source === 'ollama') {
+    if (!ollama) {
+      const baseURL = process.env.OLLAMA_BASE_URL;
+      if (!baseURL) {
+        throw new Error('Ollama is not configured (OLLAMA_BASE_URL missing).');
+      }
+      ollama = createOpenAICompatible({
+        name: 'ollama',
+        baseURL,
+        apiKey: process.env.OLLAMA_API_KEY,
+      });
+    }
+    return ollama(model);
+  }
   if (source === 'bonsai') {
     if (!bonsai) {
       const baseURL = process.env.BONSAI_BASE_URL;
@@ -165,6 +180,8 @@ export async function POST(request: Request) {
   const session = await auth();
   // Bonsai is the owner's home GPU: refuse before doing any other work.
   if (modelSource === 'bonsai' && !canUseBonsai(session)) return bonsaiDenied(session);
+  // Ollama runs on the same PC and GPU, so it follows the same allow list.
+  if (modelSource === 'ollama' && !canUseBonsai(session)) return bonsaiDenied(session, 'Ollama');
   const userId = session?.githubUserId;
 
   // Hermes runs real commands on the owner's PC: same allow list as Bonsai, and it keeps its
@@ -319,6 +336,8 @@ export async function POST(request: Request) {
   const runtime =
     modelSource === 'bonsai'
       ? `Bonsai (model "${model || 'bonsai'}"), a local model running on the owner's home PC`
+      : modelSource === 'ollama'
+        ? `the model "${model || 'default'}" through Ollama, running locally on the owner's home PC`
       : modelSource === 'omniroute'
         ? `the model "${model || 'default'}" through the owner's OmniRoute server`
         : `the model "${model || 'default'}" through Vercel AI Gateway`;
@@ -467,7 +486,7 @@ export async function POST(request: Request) {
       if (/image edit is using the GPU|gpu_busy/i.test(err instanceof Error ? err.message : '')) {
         return 'An image edit is using the GPU. Try again in a minute.';
       }
-      if (parsedRef.source === 'bonsai') return 'Something went wrong. Try again.';
+      if (parsedRef.source === 'bonsai' || parsedRef.source === 'ollama') return 'Something went wrong. Try again.';
       return modelErrorMessage(err, SOURCE_INFO[parsedRef.source].name, parsedRef.id, canUseBonsai(session));
     },
   });
