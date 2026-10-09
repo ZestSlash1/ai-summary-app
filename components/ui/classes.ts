@@ -4,7 +4,7 @@
  * color and border feedback without the squish.
  */
 export const CHIP =
-  "flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-nimbus-border px-2.5 text-[12.5px] font-medium text-nimbus-text-muted transition-[color,background-color,border-color,box-shadow,scale] duration-200 ease-[var(--nimbus-ease)] hover:border-nimbus-border-strong hover:bg-nimbus-surface-2 hover:text-nimbus-text motion-safe:active:scale-[0.95] motion-safe:active:duration-100 aria-expanded:border-nimbus-border-strong aria-expanded:bg-nimbus-surface-2 aria-expanded:text-nimbus-text";
+  "flex h-8 max-sm:h-9 shrink-0 items-center gap-1.5 rounded-lg border border-nimbus-border px-2.5 text-[12.5px] font-medium text-nimbus-text-muted transition-[color,background-color,border-color,box-shadow,scale] duration-200 ease-[var(--nimbus-ease)] hover:border-nimbus-border-strong hover:bg-nimbus-surface-2 hover:text-nimbus-text motion-safe:active:scale-[0.95] motion-safe:active:duration-100 aria-expanded:border-nimbus-border-strong aria-expanded:bg-nimbus-surface-2 aria-expanded:text-nimbus-text";
 
 /** A chip that is switched on: Plan, Workspace, skills or options in use. Add after CHIP. */
 export const CHIP_ON =

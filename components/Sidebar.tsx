@@ -255,7 +255,7 @@ export function Sidebar({
             onClick={isDesktop ? toggleCollapsed : onClose}
             aria-label={isDesktop ? "Collapse sidebar" : "Close menu"}
             title={isDesktop ? `Collapse sidebar (${modKey} B)` : "Close menu"}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-nimbus-text-muted transition-colors hover:bg-nimbus-surface-2 hover:text-nimbus-text"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-nimbus-text-muted transition-colors hover:bg-nimbus-surface-2 hover:text-nimbus-text max-md:h-10 max-md:w-10"
           >
             {isDesktop ? <PanelLeftClose aria-hidden className="h-4 w-4" /> : <X aria-hidden className="h-4 w-4" />}
           </button>
@@ -379,7 +379,7 @@ export function Sidebar({
             title="Settings"
             data-wiggle="spin"
             onPointerEnter={iconWiggle}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-nimbus-text-muted transition-colors hover:bg-nimbus-surface-2 hover:text-nimbus-text"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-nimbus-text-muted transition-colors hover:bg-nimbus-surface-2 hover:text-nimbus-text max-md:h-10 max-md:w-10"
           >
             <Settings aria-hidden className="h-4 w-4" />
           </Link>
@@ -412,7 +412,7 @@ function NavItem({
   trailing?: ReactNode;
   title?: string;
 }) {
-  const className = `group/nav relative flex h-8 items-center gap-2.5 rounded-lg px-[9px] text-[13.5px] transition-[background-color,color,scale] duration-200 ease-[var(--nimbus-ease)] motion-safe:active:scale-[0.98] ${
+  const className = `group/nav relative flex h-8 items-center gap-2.5 rounded-lg px-[9px] text-[13.5px] max-md:h-11 max-md:text-[15px] transition-[background-color,color,scale] duration-200 ease-[var(--nimbus-ease)] motion-safe:active:scale-[0.98] ${
     active
       ? "bg-nimbus-accent-soft text-nimbus-text [&>svg]:text-nimbus-accent-text"
       : "text-nimbus-text-muted hover:bg-nimbus-surface hover:text-nimbus-text"
@@ -424,7 +424,7 @@ function NavItem({
         {label}
       </span>
       {hint && (
-        <kbd data-sb-label className="ml-auto font-sans text-[11px] text-nimbus-text-faint">
+        <kbd data-sb-label className="ml-auto font-sans text-[11px] text-nimbus-text-faint max-md:hidden">
           {hint}
         </kbd>
       )}
@@ -513,7 +513,7 @@ function HistoryRow({
             setRenaming(true);
           }}
           aria-current={active ? "page" : undefined}
-          className={`flex h-8 w-full items-center gap-2 rounded-lg pl-2 pr-8 text-left text-[13px] transition-[background-color,color,scale] duration-200 ease-[var(--nimbus-ease)] motion-safe:active:scale-[0.985] ${
+          className={`flex h-8 w-full items-center gap-2 rounded-lg pl-2 pr-8 text-left text-[13px] max-md:h-11 max-md:pr-11 max-md:text-[15px] transition-[background-color,color,scale] duration-200 ease-[var(--nimbus-ease)] motion-safe:active:scale-[0.985] ${
             active
               ? "bg-nimbus-accent-soft text-nimbus-text"
               : "text-nimbus-text-muted hover:bg-nimbus-surface hover:text-nimbus-text"
@@ -535,7 +535,7 @@ function HistoryRow({
           onClick={() => (menuOpen ? closeMenu() : setMenuOpen(true))}
           aria-label={`More for ${conversation.title}`}
           aria-expanded={menuOpen}
-          className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md text-nimbus-text-muted opacity-0 transition-[opacity,background-color] hover:bg-nimbus-surface-3 hover:text-nimbus-text focus-visible:opacity-100 group-hover/row:opacity-100 aria-expanded:opacity-100 max-md:opacity-100"
+          className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md max-md:right-0.5 max-md:h-9 max-md:w-9 text-nimbus-text-muted opacity-0 transition-[opacity,background-color] hover:bg-nimbus-surface-3 hover:text-nimbus-text focus-visible:opacity-100 group-hover/row:opacity-100 aria-expanded:opacity-100 max-md:opacity-100"
         >
           <Ellipsis aria-hidden className="h-3.5 w-3.5" />
         </button>

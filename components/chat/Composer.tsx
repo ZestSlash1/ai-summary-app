@@ -272,11 +272,12 @@ export const Composer = forwardRef<
         className="aro-bare-focus block max-h-[220px] min-h-[52px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[16px] leading-6 sm:text-[14.5px] text-nimbus-text placeholder:text-nimbus-text-faint focus:outline-none"
       />
 
-      <div className="flex items-center gap-2 px-2.5 pb-2.5 pt-1">
+      <div className="flex items-center gap-2 px-2.5 pb-2.5 pt-1 max-sm:items-end">
+        {/* On phones the controls wrap onto a second row rather than scrolling sideways, so none hide off-screen. */}
         <div
           ref={controlsRef}
           data-fade="none"
-          className="aro-no-scrollbar @container/controls -mx-1 -my-2 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-1 py-2 data-[fade=both]:[mask-image:linear-gradient(90deg,transparent,#000_28px,#000_calc(100%_-_28px),transparent)] data-[fade=end]:[mask-image:linear-gradient(90deg,#000_calc(100%_-_28px),transparent)] data-[fade=start]:[mask-image:linear-gradient(90deg,transparent,#000_28px)]"
+          className="aro-no-scrollbar @container/controls -mx-1 -my-2 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-1 py-2 max-sm:flex-wrap max-sm:overflow-visibledata-[fade=both]:[mask-image:linear-gradient(90deg,transparent,#000_28px,#000_calc(100%_-_28px),transparent)] data-[fade=end]:[mask-image:linear-gradient(90deg,#000_calc(100%_-_28px),transparent)] data-[fade=start]:[mask-image:linear-gradient(90deg,transparent,#000_28px)]"
         >
           {canAttach && (
             <>
@@ -299,7 +300,7 @@ export const Composer = forwardRef<
                 disabled={streaming || preparing}
                 aria-label="Attach an image to edit"
                 title="Attach an image to edit"
-                className={`${CHIP} w-8 justify-center px-0 disabled:pointer-events-none disabled:opacity-40`}
+                className={`${CHIP} w-8 max-sm:w-9 justify-center px-0 disabled:pointer-events-none disabled:opacity-40`}
               >
                 <Paperclip aria-hidden className="h-3.5 w-3.5" />
               </button>
@@ -313,7 +314,7 @@ export const Composer = forwardRef<
               disabled={streaming}
               aria-label="Create an image from a description"
               title="Create an image from a description"
-              className={`${CHIP} disabled:pointer-events-none disabled:opacity-40 max-sm:w-8 max-sm:justify-center max-sm:px-0`}
+              className={`${CHIP} disabled:pointer-events-none disabled:opacity-40 max-sm:w-9 max-sm:justify-center max-sm:px-0`}
             >
               <WandSparkles aria-hidden className="h-3.5 w-3.5" />
               <span className="max-sm:sr-only">Create image</span>
@@ -330,7 +331,7 @@ export const Composer = forwardRef<
           disabled={!streaming && !canSend}
           aria-label={streaming ? "Stop the reply" : "Send message"}
           data-streaming={streaming || undefined}
-          className="aro-gel group/send grid h-8 shrink-0 place-items-center overflow-hidden rounded-[10px] border border-transparent bg-nimbus-accent px-3 text-[13px] font-medium text-white transition-[background-color,border-color,color,box-shadow,scale,filter] duration-300 ease-[var(--nimbus-ease)] motion-safe:active:scale-[0.94] motion-safe:active:duration-100 disabled:bg-nimbus-surface-3 disabled:text-nimbus-text-faint data-[streaming]:border-nimbus-border-strong data-[streaming]:bg-nimbus-surface-2 data-[streaming]:bg-none data-[streaming]:text-nimbus-text data-[streaming]:shadow-none data-[streaming]:hover:bg-nimbus-surface-3"
+          className="aro-gel group/send grid h-8 shrink-0 place-items-center overflow-hidden rounded-[10px] border border-transparent bg-nimbus-accent px-3 max-sm:h-10 max-sm:w-10 max-sm:px-0text-[13px] font-medium text-white transition-[background-color,border-color,color,box-shadow,scale,filter] duration-300 ease-[var(--nimbus-ease)] motion-safe:active:scale-[0.94] motion-safe:active:duration-100 disabled:bg-nimbus-surface-3 disabled:text-nimbus-text-faint data-[streaming]:border-nimbus-border-strong data-[streaming]:bg-nimbus-surface-2 data-[streaming]:bg-none data-[streaming]:text-nimbus-text data-[streaming]:shadow-none data-[streaming]:hover:bg-nimbus-surface-3"
         >
           <span
             ref={sendLayerRef}
