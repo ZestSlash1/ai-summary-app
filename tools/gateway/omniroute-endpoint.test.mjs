@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { omnirouteEndpoint } from '../../lib/omniroute.ts';
+import { isOmniRouteChatModel, omnirouteEndpoint } from '../../lib/omniroute.ts';
 
 const GATEWAY = { BONSAI_BASE_URL: 'https://home.example.ts.net/v1', BONSAI_API_KEY: 'gateway-token' };
 
@@ -33,4 +33,18 @@ test('an empty OMNIROUTE_BASE_URL counts as unset', () => {
 
 test('nothing configured means no OmniRoute', () => {
   assert.equal(omnirouteEndpoint({}), null);
+});
+
+test('the picker keeps chat models and drops image, video, audio, and embedding ones', () => {
+  const catalog = [
+    { id: 'gemini/gemini-3.5-flash' },
+    { id: 'auto/best-free', type: 'chat' },
+    { id: 'aihorde/2DN', type: 'image' },
+    { id: 'veo-free/veo', type: 'video' },
+    { id: 'gemini/gemini-embedding-2', type: 'embedding' },
+    { id: 'gemini/gemini-3.1-flash-tts-preview', type: 'audio' },
+    { id: 'x/rerank', type: 'rerank' },
+    { id: 'x/guard', type: 'moderation' },
+  ];
+  assert.deepEqual(catalog.filter(isOmniRouteChatModel).map((m) => m.id), ['gemini/gemini-3.5-flash', 'auto/best-free']);
 });
