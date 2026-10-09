@@ -277,7 +277,7 @@ export const Composer = forwardRef<
         <div
           ref={controlsRef}
           data-fade="none"
-          className="aro-no-scrollbar @container/controls -mx-1 -my-2 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-1 py-2 max-sm:flex-wrap max-sm:overflow-visibledata-[fade=both]:[mask-image:linear-gradient(90deg,transparent,#000_28px,#000_calc(100%_-_28px),transparent)] data-[fade=end]:[mask-image:linear-gradient(90deg,#000_calc(100%_-_28px),transparent)] data-[fade=start]:[mask-image:linear-gradient(90deg,transparent,#000_28px)]"
+          className="aro-no-scrollbar @container/controls -mx-1 -my-2 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-1 py-2 max-sm:flex-wrap data-[fade=both]:[mask-image:linear-gradient(90deg,transparent,#000_28px,#000_calc(100%_-_28px),transparent)] data-[fade=end]:[mask-image:linear-gradient(90deg,#000_calc(100%_-_28px),transparent)] data-[fade=start]:[mask-image:linear-gradient(90deg,transparent,#000_28px)]"
         >
           {canAttach && (
             <>
@@ -331,7 +331,7 @@ export const Composer = forwardRef<
           disabled={!streaming && !canSend}
           aria-label={streaming ? "Stop the reply" : "Send message"}
           data-streaming={streaming || undefined}
-          className="aro-gel group/send grid h-8 shrink-0 place-items-center overflow-hidden rounded-[10px] border border-transparent bg-nimbus-accent px-3 max-sm:h-10 max-sm:w-10 max-sm:px-0text-[13px] font-medium text-white transition-[background-color,border-color,color,box-shadow,scale,filter] duration-300 ease-[var(--nimbus-ease)] motion-safe:active:scale-[0.94] motion-safe:active:duration-100 disabled:bg-nimbus-surface-3 disabled:text-nimbus-text-faint data-[streaming]:border-nimbus-border-strong data-[streaming]:bg-nimbus-surface-2 data-[streaming]:bg-none data-[streaming]:text-nimbus-text data-[streaming]:shadow-none data-[streaming]:hover:bg-nimbus-surface-3"
+          className="aro-gel group/send grid h-8 shrink-0 place-items-center overflow-hidden rounded-[10px] border border-transparent bg-nimbus-accent px-3 max-sm:h-10 max-sm:w-10 max-sm:px-0 text-[13px] font-medium text-white transition-[background-color,border-color,color,box-shadow,scale,filter] duration-300 ease-[var(--nimbus-ease)] motion-safe:active:scale-[0.94] motion-safe:active:duration-100 disabled:bg-nimbus-surface-3 disabled:text-nimbus-text-faint data-[streaming]:border-nimbus-border-strong data-[streaming]:bg-nimbus-surface-2 data-[streaming]:bg-none data-[streaming]:text-nimbus-text data-[streaming]:shadow-none data-[streaming]:hover:bg-nimbus-surface-3"
         >
           <span
             ref={sendLayerRef}
