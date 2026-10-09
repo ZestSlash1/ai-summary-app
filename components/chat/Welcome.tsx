@@ -132,13 +132,13 @@ export function WelcomeBanner({
 export function WelcomeHero({ firstName }: { firstName?: string }) {
   return (
     <div className="flex flex-col items-center px-4 text-center">
-      <div data-field-focus className="relative mb-6 flex h-14 w-14 items-center justify-center">
+      <div data-field-focus className="relative mb-6 flex h-16 w-16 items-center justify-center">
         <div
           aria-hidden
           data-welcome="glow"
           className="pointer-events-none absolute -inset-16 rounded-full bg-[radial-gradient(closest-side,var(--aro-glow-2),var(--aro-glow-1)_45%,transparent)]"
         />
-        <BrandMark aurora className="relative h-12 w-12 text-nimbus-text-muted" strokeWidth={2.2} />
+        <BrandMark className="aro-mark-blink relative h-16 w-16" />
       </div>
       <h1
         data-welcome="title"
@@ -219,8 +219,8 @@ export function WelcomeSuggestions({
 }
 
 /**
- * The welcome entrance, one timeline across the whole empty state: the mark draws
- * itself, the greeting rises word by word, then the composer and starting points settle in.
+ * The welcome entrance, one timeline across the whole empty state: the mark pops
+ * in and wakes up, the greeting rises word by word, then the composer and starting points settle in.
  */
 export function useWelcomeIntro(
   scope: RefObject<HTMLElement | null>,
@@ -238,13 +238,15 @@ export function useWelcomeIntro(
       const split = title ? SplitText.create(title, { type: "words", mask: "words" }) : null;
 
       const tl = gsap.timeline({ defaults: { ease: "aro" } });
-      tl.from(q("[data-mark=bowl], [data-mark=stem]"), {
-        drawSVG: "0%",
-        duration: 1.1,
-        ease: "power2.inOut",
-        stagger: 0.18,
+      tl.from(q("[data-mark=bubble]"), {
+        autoAlpha: 0,
+        scale: 0.55,
+        rotation: -16,
+        svgOrigin: "60 60",
+        duration: 0.9,
+        ease: "back.out(2.2)",
       })
-        .from(q("[data-mark=spark]"), { scale: 0, transformOrigin: "50% 50%", duration: 0.6, ease: "back.out(3)" }, 0.75)
+        .from(q("[data-mark=eyes]"), { autoAlpha: 0, duration: 0.4, ease: "power1.out" }, 0.55)
         .from(q("[data-welcome=glow]"), { autoAlpha: 0, scale: 0.6, duration: 1.4 }, 0.1)
         .from(split?.words ?? [], { yPercent: 110, duration: 0.8, stagger: 0.06 }, 0.25)
         .from(q("[data-welcome=subtitle]"), { autoAlpha: 0, y: 8, duration: 0.7 }, 0.5)
