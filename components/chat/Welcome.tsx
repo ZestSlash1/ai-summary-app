@@ -173,7 +173,7 @@ export function WelcomeSuggestions({
   onContinue: (id: string) => void;
 }) {
   const chip =
-    "aro-glass group/chip relative flex items-center gap-2 rounded-full border px-3.5 py-2 text-[13px] max-sm:min-h-11 max-sm:text-[14px]text-nimbus-text-muted transition-[border-color,color,scale] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-border-strong hover:text-nimbus-text motion-safe:active:scale-[0.97]";
+    "aro-glass group/chip relative flex items-center gap-2 rounded-full border px-3.5 py-2 text-[13px] max-sm:min-h-11 max-sm:text-[14px] text-nimbus-text-muted transition-[border-color,color,scale] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-border-strong hover:text-nimbus-text motion-safe:active:scale-[0.97]";
   const icon =
     "h-3.5 w-3.5 shrink-0 transition-transform duration-500 ease-[var(--nimbus-ease)] group-hover/chip:-rotate-12 group-hover/chip:scale-110";
 

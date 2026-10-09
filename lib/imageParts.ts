@@ -24,6 +24,34 @@ export function parseImageDataUrl(url: string): ExtractedImage | null {
   return { data, mediaType };
 }
 
+/**
+ * Ollama models that take a picture as input. Any other Ollama model answers a request that
+ * carries an image with a 400 ("does not support multimodal requests"), whatever the image is for.
+ */
+const OLLAMA_VISION = /gemma3(?!:1b)|llava|vision|minicpm-v|moondream|qwen[\d.]*-?vl/i;
+
+/** False when sending this model an image would make the whole request fail. */
+export function canSeeImages(source: string, modelId: string): boolean {
+  return source !== 'ollama' || OLLAMA_VISION.test(modelId);
+}
+
+/**
+ * Replace each image part with a short note, for a model that cannot take images. The edit tool
+ * reads the picture from the request on the server, so the model only has to know one is there.
+ */
+export function imagesAsNotes<M extends { parts: unknown[] }>(messages: M[]): M[] {
+  return messages.map((message) => {
+    let changed = false;
+    const parts = message.parts.map((part) => {
+      const p = part as PartLike & { filename?: string };
+      if (p.type !== 'file' || !p.mediaType?.startsWith('image/')) return part;
+      changed = true;
+      return { type: 'text', text: `[Image attached${p.filename ? `: ${p.filename}` : ''}. You cannot see images.]` };
+    });
+    return changed ? ({ ...message, parts } as M) : message;
+  });
+}
+
 /** The last image on the most recent user message, or null when there is none. */
 export function extractLatestImage(messages: MessageLike[]): ExtractedImage | null {
   const last = [...messages].reverse().find((m) => m.role === 'user');
