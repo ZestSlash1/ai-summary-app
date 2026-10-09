@@ -9,6 +9,7 @@ import {
   FolderTree,
   GitCompare,
   ImagePlus,
+  WandSparkles,
   Lightbulb,
   MessageSquareText,
   Wand2,
@@ -158,6 +159,7 @@ export function WelcomeSuggestions({
   onPick,
   canEditImages,
   onPickImage,
+  onCreateImage,
   lastConversation,
   onContinue,
 }: {
@@ -165,6 +167,8 @@ export function WelcomeSuggestions({
   onPick: (prompt: string) => void;
   canEditImages: boolean;
   onPickImage: () => void;
+  /** Offered with the edit chip, where the image generator is reachable. */
+  onCreateImage?: () => void;
   lastConversation?: Conversation;
   onContinue: (id: string) => void;
 }) {
@@ -182,6 +186,12 @@ export function WelcomeSuggestions({
             {s.label}
           </button>
         ))}
+        {canEditImages && onCreateImage && (
+          <button type="button" data-welcome="chip" onClick={onCreateImage} className={chip}>
+            <WandSparkles aria-hidden className={icon} />
+            Create an image
+          </button>
+        )}
         {canEditImages && (
           <button type="button" data-welcome="chip" onClick={onPickImage} className={chip}>
             <ImagePlus aria-hidden className={icon} />

@@ -15,6 +15,8 @@ import { ThinkingIndicator } from "./ThinkingIndicator";
 import { AssistantAvatar } from "./BrandMark";
 import { AroField } from "./AroField";
 import { AroGlow, type GlowPhase } from "./AroGlow";
+import { ModsPopover } from "./ModsPopover";
+import { useMods } from "@/lib/useMods";
 import { ImageJobCard } from "./ImageJobCard";
 import { MessageText } from "./chat/Markdown";
 import { ToolActivity, type ToolCall } from "./chat/ToolActivity";
@@ -89,9 +91,21 @@ type Block =
   | { kind: "tools"; key: string; calls: ToolCall[] }
   | { kind: "image"; key: string; url: string; filename?: string }
   | { kind: "editImage"; key: string; part: Part }
+  | { kind: "createImage"; key: string; part: Part }
   | { kind: "approval"; key: string; approval: HermesApproval };
 
+/**
+ * A few characters of noise beside an image call: some local models (the uncensored Huihui) leak a
+ * stray token or two next to a tool call. The picture is the reply, so a scrap with no real words
+ * is dropped. Anything with a letter or digit in it is kept.
+ */
+function isStrayText(text: string): boolean {
+  const t = text.trim();
+  return t.length <= 12 && !/[A-Za-z0-9]/.test(t);
+}
+
 function toBlocks(parts: Part[]): Block[] {
+  const imageReply = parts.some((p) => p.type === "tool-createImage" || p.type === "tool-editImage");
   const blocks: Block[] = [];
   let tools: ToolCall[] | null = null;
   const flush = () => {
@@ -113,6 +127,11 @@ function toBlocks(parts: Part[]): Block[] {
       if (!text.trim()) return;
       flush();
       blocks.push({ kind: "reasoning", key: `r-${i}`, text, live: p.state === "streaming" });
+      return;
+    }
+    if (part.type === "tool-createImage") {
+      flush();
+      blocks.push({ kind: "createImage", key: `c-${i}`, part });
       return;
     }
     if (part.type === "tool-editImage") {
@@ -142,7 +161,7 @@ function toBlocks(parts: Part[]): Block[] {
     }
     flush();
     if (part.type === "text") {
-      if (part.text.trim()) blocks.push({ kind: "text", key: `x-${i}`, text: part.text });
+      if (part.text.trim() && !(imageReply && isStrayText(part.text))) blocks.push({ kind: "text", key: `x-${i}`, text: part.text });
     } else if (part.type === "file" && part.mediaType?.startsWith("image/")) {
       blocks.push({ kind: "image", key: `f-${i}`, url: part.url, filename: part.filename });
     }
@@ -433,6 +452,7 @@ export function ChatPanel({
 
   // Image editing: only offered to accounts allowed to use the home GPU.
   const { allowed: canEditImages, status: gpu } = useHomeGpu();
+  const { mods } = useMods();
   const contextUsage = useMemo(() => {
     const tokens = estimateConversationTokens(messages);
     const limit = getModelContextLimit(model, gpu?.bonsaiContext);
@@ -712,6 +732,19 @@ export function ChatPanel({
     }
   }
 
+  // "Create image" opens a prompt for the model to turn into a createImage call, so the same
+  // text works typed by hand. Keeps what the user already wrote, and moves the caret to the end.
+  function startImagePrompt() {
+    const next = input.trim() ? input : "Create an image of ";
+    setInput(next);
+    window.setTimeout(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(next.length, next.length);
+    }, 0);
+  }
+
   function retry() {
     setTurn({ startedAt: Date.now(), bonsai: parseModelRef(model, loadModelSource()).source === "bonsai" });
     void regenerate();
@@ -897,6 +930,7 @@ export function ChatPanel({
         <span className={CHIP_LABEL}>Plan</span>
       </button>
       <AgentOptionsPopover options={agentOptions} onChange={handleAgentOptionsChange} />
+      <ModsPopover />
       <SkillsPicker onOpenSkillsTab={mode === "code" ? () => setWorkspaceOpen(true) : undefined} />
       {mode === "code" && (
         <button
@@ -932,12 +966,12 @@ export function ChatPanel({
         {/* The welcome screen's light: an aurora under the particles, gone once the chat starts. */}
         <div
           aria-hidden
-          className={`aro-aurora -z-10 inset-x-[-15%] top-[8%] h-[80%] transition-opacity duration-700 ${isEmpty ? "opacity-100" : "opacity-0"}`}
+          className={`aro-aurora -z-10 inset-x-[-15%] top-[8%] h-[80%] transition-opacity duration-700 ${isEmpty && mods.aurora ? "opacity-100" : "opacity-0"}`}
         />
         {/* Ambient particles behind the welcome screen; fades away once the chat starts. */}
-        <AroField active={isEmpty && active} scopeRef={containerRef} />
+        <AroField active={isEmpty && active && Boolean(mods.field)} scopeRef={containerRef} />
         {/* Light behind the thread while a reply is on its way; see lib/aroGlow.ts. */}
-        <AroGlow phase={glowPhase} />
+        <AroGlow phase={mods.glow ? glowPhase : "idle"} />
 
       {isEmpty && (
         <div className="absolute inset-x-0 top-4 z-10 flex justify-center">
@@ -1023,7 +1057,7 @@ export function ChatPanel({
                   (p): p is Extract<Part, { type: "file" }> => p.type === "file" && Boolean(p.mediaType?.startsWith("image/"))
                 );
                 return (
-                  <div key={message.id} data-message={message.id} data-role="user" className="flex flex-col items-end gap-2 pl-10">
+                  <div key={message.id} data-message={message.id} data-role="user" data-last={message.id === lastMessage?.id} className="flex flex-col items-end gap-2 pl-10">
                     {images.map((img, i) => (
                       // eslint-disable-next-line @next/next/no-img-element -- the user's own attachment, a data URL
                       <img
@@ -1114,6 +1148,41 @@ export function ChatPanel({
                               <div className="nimbus-sheen relative aspect-square w-full overflow-hidden rounded-[14px] border border-nimbus-border bg-nimbus-surface" />
                               <p role="status" aria-live="polite" className="px-1 text-[13px] text-nimbus-text-muted">
                                 Sending your image to the GPU
+                              </p>
+                            </div>
+                          );
+                        }
+                        case "createImage": {
+                          const p = block.part as {
+                            state: string;
+                            input?: { prompt?: string };
+                            output?: { jobId?: string; error?: string; skipped?: boolean };
+                            errorText?: string;
+                          };
+                          // A second createImage call in one reply is not run, so it shows nothing.
+                          if (p.output?.skipped) return null;
+                          const onRetry = isLast && !isStreaming ? retry : undefined;
+                          if (p.state === "output-available" && p.output?.jobId) {
+                            return (
+                              <ImageJobCard key={block.key} kind="create" jobId={p.output.jobId} instruction={p.input?.prompt} onRetry={onRetry} />
+                            );
+                          }
+                          if (p.state === "output-available" || p.state === "output-error") {
+                            return (
+                              <ImageJobCard
+                                key={block.key}
+                                kind="create"
+                                error={p.output?.error || p.errorText || "The image could not start."}
+                                instruction={p.input?.prompt}
+                                onRetry={onRetry}
+                              />
+                            );
+                          }
+                          return (
+                            <div key={block.key} className="mt-2 flex w-full max-w-[22rem] flex-col gap-2">
+                              <div className="nimbus-sheen relative aspect-square w-full overflow-hidden rounded-[14px] border border-nimbus-border bg-nimbus-surface" />
+                              <p role="status" aria-live="polite" className="px-1 text-[13px] text-nimbus-text-muted">
+                                Sending your description to the GPU
                               </p>
                             </div>
                           );
@@ -1256,6 +1325,7 @@ export function ChatPanel({
             attachment={attachment}
             preparing={preparing || isSwitching}
             canAttach={Boolean(canEditImages)}
+            onCreateImage={canEditImages ? startImagePrompt : undefined}
             onAttachFile={(file) => void attachFile(file)}
             onRemoveAttachment={() => setAttachment(null)}
             dragging={dragging}
@@ -1278,6 +1348,7 @@ export function ChatPanel({
             onPick={(prompt) => trySend(prompt)}
             canEditImages={Boolean(canEditImages)}
             onPickImage={() => fileInputRef.current?.click()}
+            onCreateImage={canEditImages ? startImagePrompt : undefined}
             lastConversation={lastConversation}
             onContinue={onSelectConversation}
           />

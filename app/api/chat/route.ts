@@ -133,7 +133,7 @@ function compactHistory(messages: UIMessage[]): UIMessage[] {
     const parts = message.parts.map((part) => {
       const p = part as { type: string; state?: string; output?: unknown };
       const isTool = p.type.startsWith('tool-') || p.type === 'dynamic-tool';
-      if (!isTool || p.state !== 'output-available' || p.type === 'tool-editImage') return part;
+      if (!isTool || p.state !== 'output-available' || p.type === 'tool-editImage' || p.type === 'tool-createImage') return part;
       if (JSON.stringify(p.output ?? null).length <= MAX_HISTORY_TOOL_OUTPUT) return part;
       changed = true;
       return {
@@ -225,7 +225,8 @@ export async function POST(request: Request) {
 
   // Image editing runs on the owner's home GPU, so it is offered only to allow-listed
   // users, and only when the latest message actually carries an image to edit.
-  const attachedImage = canUseBonsai(session) ? extractLatestImage(messages) : null;
+  const homeAllowed = canUseBonsai(session);
+  const attachedImage = homeAllowed ? extractLatestImage(messages) : null;
   const imageTools: ToolSet = attachedImage
     ? {
         editImage: tool({
@@ -244,6 +245,44 @@ export async function POST(request: Request) {
               const { jobId } = await comfy().startEdit({ instruction, image: attachedImage });
               return { jobId, status: 'queued' as const };
             } catch (err) {
+              return { error: friendlyComfyError(err) };
+            }
+          },
+        }),
+      }
+    : {};
+
+  // Any model can ask for a picture, even one that cannot see or make images itself: this tool
+  // only hands a description to ComfyUI on the home GPU. Offered to the same allow list as edits.
+  // One picture per reply: a model that calls it twice would start two GPU jobs for one request.
+  let pictureStarted = false;
+  const createTools: ToolSet = homeAllowed
+    ? {
+        createImage: tool({
+          description:
+            'Create a new picture from a written description, with the image generator on the home GPU. ' +
+            'Starts a job that takes a minute or two. The result appears in the chat by itself, so do not describe it.',
+          inputSchema: z.object({
+            prompt: z
+              .string()
+              .min(3)
+              .max(1200)
+              .describe(
+                'A vivid description of the picture: the subject, the setting, the style, the light and the mood. Write it in English.',
+              ),
+            aspect: z
+              .enum(['square', 'landscape', 'portrait'])
+              .optional()
+              .describe('The shape of the picture. Defaults to square.'),
+          }),
+          execute: async ({ prompt, aspect }) => {
+            if (pictureStarted) return { skipped: true as const };
+            pictureStarted = true;
+            try {
+              const { jobId } = await comfy().startCreate({ prompt, aspect });
+              return { jobId, status: 'queued' as const };
+            } catch (err) {
+              pictureStarted = false;
               return { error: friendlyComfyError(err) };
             }
           },
@@ -307,6 +346,7 @@ export async function POST(request: Request) {
       : {};
   const builtinToolsFiltered = toolToggles?.calculate !== false ? builtinTools : {};
   const imageToolsFiltered = !isReadonly && toolToggles?.imageEdit !== false ? imageTools : {};
+  const createToolsFiltered = !isReadonly && toolToggles?.imageCreate !== false ? createTools : {};
   const repoToolsFiltered = toolToggles?.repo !== false ? repoTools : {};
 
   // First-party tools go last so an MCP server cannot shadow one by reusing its name.
@@ -315,6 +355,7 @@ export async function POST(request: Request) {
     mcpToolsFiltered,
     builtinToolsFiltered,
     imageToolsFiltered,
+    createToolsFiltered,
     repoToolsFiltered,
     skillTools
   );
@@ -351,6 +392,13 @@ export async function POST(request: Request) {
     systemPrompt +=
       '\n\nThe user attached an image. If they want it changed, call editImage once with a clear instruction. ' +
       'Do not describe the finished picture, it is shown to them automatically.';
+  }
+  if (tools.createImage) {
+    systemPrompt +=
+      '\n\nYou can make pictures. When the user asks you to draw, create, generate or imagine an image, call createImage exactly once ' +
+      'with one vivid, specific description (subject, setting, style, light, mood), then add at most one short sentence. ' +
+      'Never call it more than once for a request. Do not say you cannot make images, and do not describe the finished ' +
+      'picture: it is shown to them automatically.';
   }
 
   // Project memory: recall relevant chunks from a connected repo, so the
@@ -464,6 +512,9 @@ export async function POST(request: Request) {
   const stopWhenConditions = [stepCountIs(maxSteps)];
   if (tools.editImage) {
     stopWhenConditions.push(hasToolCall('editImage'));
+  }
+  if (tools.createImage) {
+    stopWhenConditions.push(hasToolCall('createImage'));
   }
 
   const result = streamText({

@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
-import { ArrowUp, Loader2, Paperclip, Square, X } from "lucide-react";
+import { ArrowUp, Loader2, Paperclip, Square, WandSparkles, X } from "lucide-react";
 import { gsap, useGSAP, iconWiggle, reducedMotion } from "@/lib/motion";
 import { ACCEPTED_IMAGE_TYPES, type PreparedImage } from "@/lib/imageResize";
 import { useMediaQuery } from "@/lib/useMediaQuery";
@@ -36,6 +36,8 @@ export const Composer = forwardRef<
     dragging: boolean;
     contextUsage?: { tokens: number; limit: number; percent: number; level: "normal" | "warning" | "danger" } | null;
     onSlashCommand?: (command: SlashCommand["id"]) => void;
+    /** Starts a "create an image" prompt. Offered only where the image generator is reachable. */
+    onCreateImage?: () => void;
   }
 >(function Composer(
   {
@@ -57,6 +59,7 @@ export const Composer = forwardRef<
     dragging,
     contextUsage,
     onSlashCommand,
+    onCreateImage,
   },
   ref
 ) {
@@ -301,6 +304,20 @@ export const Composer = forwardRef<
                 <Paperclip aria-hidden className="h-3.5 w-3.5" />
               </button>
             </>
+          )}
+          {onCreateImage && (
+            <button
+              type="button"
+              onClick={onCreateImage}
+              onPointerEnter={iconWiggle}
+              disabled={streaming}
+              aria-label="Create an image from a description"
+              title="Create an image from a description"
+              className={`${CHIP} disabled:pointer-events-none disabled:opacity-40 max-sm:w-8 max-sm:justify-center max-sm:px-0`}
+            >
+              <WandSparkles aria-hidden className="h-3.5 w-3.5" />
+              <span className="max-sm:sr-only">Create image</span>
+            </button>
           )}
           {controls}
         </div>

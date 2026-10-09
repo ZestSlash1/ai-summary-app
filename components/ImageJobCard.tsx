@@ -25,7 +25,7 @@ const buttonClass =
   "inline-flex h-9 items-center gap-1.5 rounded-lg border border-nimbus-border bg-nimbus-surface px-3 text-[12.5px] font-medium text-nimbus-text-muted transition-[color,background-color,transform] duration-200 hover:bg-nimbus-surface-2 hover:text-nimbus-text active:scale-95";
 
 /**
- * Shows an image edit job: a placeholder while it runs, the picture when it is done,
+ * Shows an image job (an edit, or a picture made from text): a placeholder while it runs, the picture when it is done,
  * and a clear message when it is not. Polls the job route until it settles.
  * `error` is a failure already known when the card mounts (the tool could not start the job).
  */
@@ -33,13 +33,17 @@ export function ImageJobCard({
   jobId,
   error,
   instruction,
+  kind = "edit",
   onRetry,
 }: {
   jobId?: string;
   error?: string;
   instruction?: string;
+  /** "edit" changes an attached picture; "create" makes one from a description. */
+  kind?: "edit" | "create";
   onRetry?: () => void;
 }) {
+  const noun = kind === "create" ? "image" : "edit";
   const [phase, setPhase] = useState<Phase>(
     error
       ? { kind: "error", message: error, action: "retry" }
@@ -70,7 +74,7 @@ export function ImageJobCard({
           }
           if (res.status === 400) {
             if (!cancelled) {
-              setPhase({ kind: "error", message: "This edit could not be found.", action: "none" });
+              setPhase({ kind: "error", message: `This ${noun} could not be found.`, action: "none" });
             }
             return;
           }
@@ -80,12 +84,12 @@ export function ImageJobCard({
           if (cancelled) return;
           if (body.status === "done") return setPhase({ kind: "done" });
           if (body.status === "error") {
-            return setPhase({ kind: "error", message: body.message || "The edit failed.", action: "retry" });
+            return setPhase({ kind: "error", message: body.message || `The ${noun} failed.`, action: "retry" });
           }
           if (body.status === "unknown") {
             return setPhase({
               kind: "error",
-              message: "This edit is no longer available. The image server may have restarted.",
+              message: `This ${noun} is no longer available. The image server may have restarted.`,
               action: "retry",
             });
           }
@@ -125,7 +129,10 @@ export function ImageJobCard({
   }, [pending]);
 
   const src = jobId ? `/api/image-jobs/${jobId}/image` : undefined;
-  const alt = instruction ? `Edited image: ${instruction}` : "Edited image";
+  const alt =
+    kind === "create"
+      ? instruction ? `Generated image: ${instruction}` : "Generated image"
+      : instruction ? `Edited image: ${instruction}` : "Edited image";
 
   function checkAgain() {
     setPhase({ kind: "pending", queued: false });
@@ -192,7 +199,7 @@ export function ImageJobCard({
       {pending ? (
         <figcaption role="status" aria-live="polite" className="flex flex-col gap-0.5 px-1 text-[13px]">
           <span className="aro-shimmer font-medium">
-            {phase.kind === "pending" && phase.queued ? "Waiting for the GPU" : "Editing your image"}
+            {phase.kind === "pending" && phase.queued ? "Waiting for the GPU" : kind === "create" ? "Creating your image" : "Editing your image"}
           </span>
           <span className="text-xs text-nimbus-text-muted">
             {clock(elapsed)} elapsed. Usually one to two minutes.
@@ -200,7 +207,7 @@ export function ImageJobCard({
         </figcaption>
       ) : (
         <figcaption className="flex flex-wrap items-center gap-2 px-1">
-          <a href={src} download="aro-edit.png" className={buttonClass}>
+          <a href={src} download={kind === "create" ? "aro-image.png" : "aro-edit.png"} className={buttonClass}>
             <Download aria-hidden className="h-3.5 w-3.5" />
             Download
           </a>

@@ -30,6 +30,7 @@ const DEFAULT_TOOLS: AgentToolToggles = {
   web: true,
   calculate: true,
   imageEdit: true,
+  imageCreate: true,
 };
 
 export function AgentOptionsPopover({
@@ -207,6 +208,7 @@ export function AgentOptionsPopover({
                 { key: "web" as keyof AgentToolToggles, label: "Web and search" },
                 { key: "calculate" as keyof AgentToolToggles, label: "Calculator" },
                 { key: "imageEdit" as keyof AgentToolToggles, label: "Image edit" },
+                { key: "imageCreate" as keyof AgentToolToggles, label: "Image create" },
               ].map(({ key, label }) => {
                 const active = tools[key] !== false;
                 return (
