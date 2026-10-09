@@ -877,3 +877,40 @@ body {
 :root[data-mod-spotlight="on"] .aro-spotlight {
   opacity: 1;
 }
+
+/* ---------- The mark ----------
+   The welcome mark blinks every few seconds, and the reply avatar bobs while a reply is on its way.
+   Both stop for people who ask for less motion. */
+@keyframes aro-blink {
+  0%,
+  90%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.1);
+  }
+}
+.aro-mark-blink [data-mark="eyes"] {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: aro-blink 5.5s ease-in-out infinite;
+}
+@keyframes aro-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-1.5px) rotate(-4deg);
+  }
+}
+.aro-avatar[data-live] svg {
+  animation: aro-bob 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aro-mark-blink [data-mark="eyes"],
+  .aro-avatar[data-live] svg {
+    animation: none;
+  }
+}

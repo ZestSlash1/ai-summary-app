@@ -1,79 +1,85 @@
 "use client";
 
 import { forwardRef, useId } from "react";
+import {
+  BUBBLE_PATH,
+  EYES,
+  EYE_STROKE,
+  GRADIENT,
+  MARK_NUDGE,
+  MARK_SIZE,
+  MARK_TILT,
+  SCREEN,
+  SCREEN_FILL,
+  type Mood,
+} from "@/lib/aroMark";
 
 /**
- * ARO's mark: a single-story "a" (bowl and stem) with a spark above the stem.
- * Drawn with strokes so the welcome screen can draw it on with DrawSVG.
- * Paths carry data-mark attributes for animation targets. With `aurora`, the strokes carry
- * the brand light (blue into violet) and the spark turns cyan.
+ * ARO's mark: a speech-bubble character. The drawing comes from lib/aroMark.ts, the same source
+ * the app icons are built from. Its gradient runs from the brand cyan into the brand blue through
+ * the aurora tokens, so it follows the accent a user picks in Mods.
+ *
+ * `mood` changes the face: "idle" by default, "think" while a reply is on its way, "happy", "cool".
+ * Parts carry data-mark attributes for animation: the welcome screen pops the bubble in, wakes the
+ * eyes, and the blink in app/globals.css runs on the eyes.
  */
-export const BrandMark = forwardRef<SVGSVGElement, { className?: string; strokeWidth?: number; aurora?: boolean }>(
-  function BrandMark({ className, strokeWidth = 2.6, aurora = false }, ref) {
-    const gradientId = `aro-mark-${useId().replace(/[^a-zA-Z0-9-]/g, "")}`;
-    const stroke = aurora ? `url(#${gradientId})` : "currentColor";
-    return (
-      <svg
-        ref={ref}
-        viewBox="0 0 32 32"
-        fill="none"
-        className={className}
-        aria-hidden="true"
-      >
-        {aurora && (
-          <defs>
-            <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1="6" y1="27" x2="26" y2="9">
-              <stop offset="0" stopColor="var(--aro-aurora-1)" />
-              <stop offset="1" stopColor="var(--aro-aurora-2)" />
-            </linearGradient>
-          </defs>
-        )}
-        <circle
-          data-mark="bowl"
-          cx="14.5"
-          cy="17.5"
-          r="7"
-          stroke={stroke}
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          transform="rotate(-90 14.5 17.5)"
-        />
-        <path
-          data-mark="stem"
-          d="M21.5 12v12.5"
-          stroke={stroke}
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-        />
-        <circle data-mark="spark" cx="25.5" cy="6.5" r="2.3" fill={aurora ? "var(--aro-aurora-3)" : "var(--nimbus-accent)"} />
-      </svg>
-    );
-  }
-);
+export const BrandMark = forwardRef<SVGSVGElement, { className?: string; mood?: Mood }>(function BrandMark(
+  { className, mood = "idle" },
+  ref,
+) {
+  const gradientId = `aro-mark-${useId().replace(/[^a-zA-Z0-9-]/g, "")}`;
+  return (
+    <svg ref={ref} viewBox={`0 0 ${MARK_SIZE} ${MARK_SIZE}`} fill="none" className={className} aria-hidden="true">
+      <defs>
+        <linearGradient id={gradientId} x1={GRADIENT.x1} y1={GRADIENT.y1} x2={GRADIENT.x2} y2={GRADIENT.y2}>
+          <stop offset="0" stopColor="var(--aro-aurora-3)" />
+          <stop offset="1" stopColor="var(--aro-aurora-1)" />
+        </linearGradient>
+      </defs>
+      <g transform={`${MARK_NUDGE} ${MARK_TILT}`}>
+        <g data-mark="bubble">
+          <path d={BUBBLE_PATH} fill={`url(#${gradientId})`} />
+          <rect
+            x={SCREEN.x}
+            y={SCREEN.y}
+            width={SCREEN.width}
+            height={SCREEN.height}
+            rx={SCREEN.rx}
+            fill={SCREEN_FILL}
+            stroke="#fff"
+            strokeWidth={SCREEN.ringWidth}
+          />
+          <g data-mark="eyes" data-mood={mood}>
+            {EYES[mood].map((eye) =>
+              eye.fill ? (
+                <path key={eye.d} d={eye.d} fill="#fff" />
+              ) : (
+                <path key={eye.d} d={eye.d} stroke="#fff" strokeWidth={EYE_STROKE} strokeLinecap="round" strokeLinejoin="round" />
+              ),
+            )}
+          </g>
+        </g>
+      </g>
+    </svg>
+  );
+});
 
-/** The mark on a filled accent tile, used as the app icon in the sidebar. */
+/** The mark on a dark tile, the app icon as it shows in the sidebar and headers. */
 export function BrandTile({ className = "h-7 w-7" }: { className?: string }) {
   return (
     <span
-      className={`aro-gel relative flex shrink-0 items-center justify-center rounded-[8px] bg-nimbus-accent text-white ${className}`}
+      className={`relative flex shrink-0 items-center justify-center rounded-[8px] bg-[#09090c] ring-1 ring-inset ring-white/10 ${className}`}
     >
-      <svg viewBox="0 0 32 32" fill="none" className="h-[70%] w-[70%]" aria-hidden="true">
-        <circle cx="14.5" cy="17.5" r="7" stroke="currentColor" strokeWidth="3" />
-        <path d="M21.5 12v12.5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-        <circle cx="25.5" cy="6.5" r="2.4" fill="currentColor" />
-      </svg>
+      <BrandMark className="h-[84%] w-[84%]" />
     </span>
   );
 }
 
-/** Small round assistant avatar next to replies. */
+/** The assistant beside its replies. It looks thoughtful while a reply is on its way. */
 export function AssistantAvatar({ live = false }: { live?: boolean }) {
   return (
-    <span
-      data-live={live || undefined}
-      className="aro-avatar flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent text-nimbus-text [background:linear-gradient(var(--nimbus-surface),var(--nimbus-surface))_padding-box,linear-gradient(135deg,var(--aro-aurora-1),var(--aro-aurora-2)_55%,var(--aro-aurora-3))_border-box]"
-    >
-      <BrandMark className="h-[17px] w-[17px]" strokeWidth={2.8} />
+    <span data-live={live || undefined} className="aro-avatar flex h-7 w-7 shrink-0 items-center justify-center">
+      <BrandMark mood={live ? "think" : "idle"} className="h-full w-full" />
     </span>
   );
 }
