@@ -13,6 +13,7 @@ export type GpuStatus = {
   comfy: GpuState;
   imageBusy: boolean;
   hermes?: "online" | "offline" | "unconfigured";
+  ollama?: "online" | "offline" | "unconfigured";
 };
 
 type Snapshot = { allowed: boolean; status: GpuStatus | null };

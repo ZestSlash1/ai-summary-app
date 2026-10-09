@@ -64,10 +64,15 @@ export function estimateConversationTokens(messages: UIMessage[]): number {
  * window, assume the small one: guessing high lets a prompt overflow llama-server. */
 export const BONSAI_SAFE_CONTEXT = 32768;
 
+/** The window the Ollama models are created with (`PARAMETER num_ctx` in tools/ollama/*.Modelfile).
+ * Ollama's OpenAI endpoint cannot set it per request, so this must match what was baked in. */
+export const OLLAMA_CONTEXT = 12288;
+
 export function getModelContextLimit(modelRef: string, bonsaiContext?: number | null): number {
   if (modelRef.startsWith("bonsai::")) {
     return bonsaiContext && bonsaiContext > 0 ? bonsaiContext : BONSAI_SAFE_CONTEXT;
   }
+  if (modelRef.startsWith("ollama::")) return OLLAMA_CONTEXT;
   return 131072; // default 128k
 }
 

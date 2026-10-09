@@ -4,6 +4,7 @@ import {
   fetchGatewayModels,
   fetchOmniRouteModels,
   fetchBonsaiModels,
+  fetchOllamaModels,
   fetchHermesModels,
 } from "@/lib/modelCatalog";
 
@@ -15,9 +16,11 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const source = new URL(request.url).searchParams.get("source");
 
-  if (source === "bonsai" || source === "hermes") {
+  if (source === "bonsai" || source === "ollama" || source === "hermes") {
     const session = await auth();
-    if (!canUseBonsai(session)) return bonsaiDenied(session, source === "hermes" ? "Hermes" : "Bonsai");
+    if (!canUseBonsai(session)) {
+      return bonsaiDenied(session, source === "hermes" ? "Hermes" : source === "ollama" ? "Ollama" : "Bonsai");
+    }
   }
 
   try {
@@ -26,6 +29,8 @@ export async function GET(request: Request) {
       models = await fetchHermesModels();
     } else if (source === "bonsai") {
       models = await fetchBonsaiModels();
+    } else if (source === "ollama") {
+      models = await fetchOllamaModels();
     } else if (source === "omniroute") {
       models = await fetchOmniRouteModels();
     } else {

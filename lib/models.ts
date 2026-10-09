@@ -7,6 +7,7 @@ const LAST_RESORT: Record<ModelSource, string> = {
   omniroute: "auto/best-free",
   gateway: FALLBACK_MODEL,
   bonsai: "bonsai-2-27b",
+  ollama: "huihui-qwen3-14b",
   hermes: "hermes-agent",
 };
 

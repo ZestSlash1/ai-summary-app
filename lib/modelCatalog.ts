@@ -95,6 +95,50 @@ export async function fetchBonsaiModels(): Promise<ModelOption[]> {
 }
 
 
+/**
+ * How an Ollama model id reads in the picker. Ids look like "qwen3:8b" or "huihui-qwen3-14b",
+ * and a ":latest" tag is noise.
+ */
+export function ollamaModelLabel(id: string): string {
+  const words = id
+    .replace(/:latest$/, "")
+    .split(/[-_:\s]+/)
+    .filter(Boolean)
+    .map((w) => (/^\d+(\.\d+)?b$/i.test(w) ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1)));
+  const label = words.join(" ");
+  // Models with their refusals removed say so, so nobody picks one by accident.
+  return /huihui|abliterated|uncensored/i.test(id) ? `${label} (uncensored)` : label;
+}
+
+/** Ollama's list has embedding models in it, which cannot chat. */
+const OLLAMA_NOT_CHAT = /embed|rerank/i;
+
+/** Models in the owner's Ollama, through the gateway. Empty when the PC or Ollama is off. */
+export async function fetchOllamaModels(): Promise<ModelOption[]> {
+  const baseURL = process.env.OLLAMA_BASE_URL;
+  if (!baseURL) return [];
+
+  try {
+    const res = await fetch(`${baseURL}/models`, {
+      headers: process.env.OLLAMA_API_KEY
+        ? { Authorization: `Bearer ${process.env.OLLAMA_API_KEY}` }
+        : undefined,
+      signal: AbortSignal.timeout(4000),
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) return [];
+
+    const body = (await res.json()) as { data?: { id: string }[] };
+    return (body.data ?? [])
+      .filter((m) => !OLLAMA_NOT_CHAT.test(m.id))
+      .map((m) => ({ id: m.id, name: ollamaModelLabel(m.id), free: true }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    // PC off or tunnel down: an empty list, never a 500.
+    return [];
+  }
+}
+
 /** Hermes profiles the home gateway exposes. Empty when Hermes is off or not set up. */
 export async function fetchHermesModels(): Promise<ModelOption[]> {
   const endpoint = hermesEndpoint();

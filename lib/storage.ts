@@ -62,7 +62,7 @@ export function createConversation(
   };
 }
 
-export type ModelSource = "gateway" | "omniroute" | "bonsai" | "hermes";
+export type ModelSource = "gateway" | "omniroute" | "bonsai" | "ollama" | "hermes";
 
 export function getDefaultModelKey(mode?: "chat" | "code"): string {
   return mode === "code" ? "aro-default-model:code" : "aro-default-model";
