@@ -19,7 +19,7 @@ import { FALLBACK_MODEL, type AgentOptions } from '@/lib/types';
 import { safeEvaluate } from '@/lib/calc';
 import { canUseBonsai, bonsaiDenied } from '@/lib/access';
 import { comfy, friendlyComfyError } from '@/lib/comfy';
-import { extractLatestImage } from '@/lib/imageParts';
+import { canSeeImages, extractLatestImage, imagesAsNotes } from '@/lib/imageParts';
 import { createRepoTools, repoSystemPrompt } from '@/lib/repoTools';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isPublicHttpUrl } from '@/lib/safeUrl';
@@ -517,10 +517,16 @@ export async function POST(request: Request) {
     stopWhenConditions.push(hasToolCall('createImage'));
   }
 
+  // A text-only Ollama model rejects any request that carries an image, even one that is only
+  // there to be edited. The model gets a note in its place; editImage still reads the real picture.
+  const modelMessages = canSeeImages(parsedRef.source, parsedRef.id)
+    ? processedMessages
+    : imagesAsNotes(processedMessages);
+
   const result = streamText({
     model: resolveModel(resolvedModelId, modelSource),
     system: systemPrompt,
-    messages: await convertToModelMessages(processedMessages),
+    messages: await convertToModelMessages(modelMessages),
     tools,
     providerOptions,
     stopWhen: stopWhenConditions,
