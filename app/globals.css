@@ -699,3 +699,181 @@ body {
     backdrop-filter: none;
   }
 }
+
+
+/* ---------- Mods ----------
+   Each mod is an attribute on <html> (see lib/mods.ts): "on" or "off" for a switch, the
+   picked value for a choice. Particle field, Aurora and Reply glow are components that read
+   the same state instead of CSS, so they have no rule here. */
+
+/* Accent: one set of tokens, so every button, link, and highlight follows the pick. */
+
+:root[data-mod-accent="violet"] {
+  --nimbus-accent: #6a3de8;
+  --nimbus-accent-hover: #7f58ee;
+  --nimbus-accent-press: #4d28b8;
+  --nimbus-accent-text: light-dark(#6a3de8, #b79cff);
+  --nimbus-accent-soft: light-dark(rgba(106, 61, 232, 0.09), rgba(106, 61, 232, 0.18));
+  --nimbus-glow: 0 8px 22px -8px rgba(106, 61, 232, 0.75);
+  --aro-aurora-1: #6a3de8;
+  --aro-aurora-2: #c14bff;
+  --aro-aurora-3: #3d8bff;
+  --aro-glow-1: light-dark(rgba(106, 61, 232, 0.13), rgba(106, 61, 232, 0.3));
+  --aro-glow-2: light-dark(rgba(193, 75, 255, 0.11), rgba(193, 75, 255, 0.24));
+  --aro-glow-3: light-dark(rgba(61, 139, 255, 0.1), rgba(61, 139, 255, 0.18));
+  --aro-gel: linear-gradient(135deg, #8a63f0 0%, #6a3de8 46%, #3b2bb8 100%);
+  --aro-gel-hover: linear-gradient(135deg, #9f7bf3 0%, #7f58ee 46%, #4a37cf 100%);
+}
+
+:root[data-mod-accent="ember"] {
+  --nimbus-accent: #c2410c;
+  --nimbus-accent-hover: #d9531d;
+  --nimbus-accent-press: #8f2f08;
+  --nimbus-accent-text: light-dark(#c2410c, #ff9a6b);
+  --nimbus-accent-soft: light-dark(rgba(194, 65, 12, 0.09), rgba(194, 65, 12, 0.18));
+  --nimbus-glow: 0 8px 22px -8px rgba(194, 65, 12, 0.75);
+  --aro-aurora-1: #c2410c;
+  --aro-aurora-2: #ff7a1a;
+  --aro-aurora-3: #ffb347;
+  --aro-glow-1: light-dark(rgba(194, 65, 12, 0.13), rgba(194, 65, 12, 0.3));
+  --aro-glow-2: light-dark(rgba(255, 122, 26, 0.11), rgba(255, 122, 26, 0.24));
+  --aro-glow-3: light-dark(rgba(255, 179, 71, 0.1), rgba(255, 179, 71, 0.18));
+  --aro-gel: linear-gradient(135deg, #e0602a 0%, #c2410c 46%, #92290a 100%);
+  --aro-gel-hover: linear-gradient(135deg, #ea7440 0%, #d9531d 46%, #a8340c 100%);
+}
+
+:root[data-mod-accent="mint"] {
+  --nimbus-accent: #0f7a57;
+  --nimbus-accent-hover: #138f67;
+  --nimbus-accent-press: #0a5a40;
+  --nimbus-accent-text: light-dark(#0f7a57, #45d39b);
+  --nimbus-accent-soft: light-dark(rgba(15, 122, 87, 0.09), rgba(15, 122, 87, 0.18));
+  --nimbus-glow: 0 8px 22px -8px rgba(15, 122, 87, 0.75);
+  --aro-aurora-1: #0f7a57;
+  --aro-aurora-2: #21c997;
+  --aro-aurora-3: #1fb8d6;
+  --aro-glow-1: light-dark(rgba(15, 122, 87, 0.13), rgba(15, 122, 87, 0.3));
+  --aro-glow-2: light-dark(rgba(33, 201, 151, 0.11), rgba(33, 201, 151, 0.24));
+  --aro-glow-3: light-dark(rgba(31, 184, 214, 0.1), rgba(31, 184, 214, 0.18));
+  --aro-gel: linear-gradient(135deg, #1fa07a 0%, #0f7a57 46%, #0a5a52 100%);
+  --aro-gel-hover: linear-gradient(135deg, #2bb78e 0%, #138f67 46%, #0e6b60 100%);
+}
+
+:root[data-mod-accent="rose"] {
+  --nimbus-accent: #c8235f;
+  --nimbus-accent-hover: #de3a75;
+  --nimbus-accent-press: #98184a;
+  --nimbus-accent-text: light-dark(#c8235f, #ff8ab3);
+  --nimbus-accent-soft: light-dark(rgba(200, 35, 95, 0.09), rgba(200, 35, 95, 0.18));
+  --nimbus-glow: 0 8px 22px -8px rgba(200, 35, 95, 0.75);
+  --aro-aurora-1: #c8235f;
+  --aro-aurora-2: #ff6b9a;
+  --aro-aurora-3: #8a5cff;
+  --aro-glow-1: light-dark(rgba(200, 35, 95, 0.13), rgba(200, 35, 95, 0.3));
+  --aro-glow-2: light-dark(rgba(255, 107, 154, 0.11), rgba(255, 107, 154, 0.24));
+  --aro-glow-3: light-dark(rgba(138, 92, 255, 0.1), rgba(138, 92, 255, 0.18));
+  --aro-gel: linear-gradient(135deg, #e0457f 0%, #c8235f 46%, #8c1a6b 100%);
+  --aro-gel-hover: linear-gradient(135deg, #ea5b92 0%, #de3a75 46%, #a32180 100%);
+}
+
+/* Code colors: the sugar-high palette. */
+:root[data-mod-code="midnight"] {
+  --sh-class: light-dark(#2b4fc7, #7aa2ff);
+  --sh-identifier: light-dark(#1b2240, #dbe4ff);
+  --sh-sign: light-dark(#5a6590, #7d8bb5);
+  --sh-property: light-dark(#0b6aa8, #69d0ff);
+  --sh-entity: light-dark(#6b3fc0, #b794ff);
+  --sh-jsxliterals: light-dark(#2f3a66, #c3cdf5);
+  --sh-string: light-dark(#0f7a5a, #7ee2b8);
+  --sh-keyword: light-dark(#b8326a, #ff8fb1);
+  --sh-comment: light-dark(#7c86a8, #5c6890);
+}
+
+:root[data-mod-code="paper"] {
+  --sh-class: light-dark(#8a4b14, #e0a46a);
+  --sh-identifier: light-dark(#2b2118, #efe3d3);
+  --sh-sign: light-dark(#7a6a58, #a8967f);
+  --sh-property: light-dark(#7a5b0a, #e6c36e);
+  --sh-entity: light-dark(#8c3b2f, #e69a8c);
+  --sh-jsxliterals: light-dark(#3a2f24, #d9ccb8);
+  --sh-string: light-dark(#4d6b2a, #b5cf86);
+  --sh-keyword: light-dark(#a3382c, #ef8f7f);
+  --sh-comment: light-dark(#9a8c7a, #7d705f);
+}
+
+:root[data-mod-code="terminal"] {
+  --sh-class: light-dark(#0b6b2c, #4ade80);
+  --sh-identifier: light-dark(#14301c, #bbf7d0);
+  --sh-sign: light-dark(#3f7a52, #5fae7a);
+  --sh-property: light-dark(#0a7f4f, #34d399);
+  --sh-entity: light-dark(#0b7a3a, #86efac);
+  --sh-jsxliterals: light-dark(#1d4b2b, #a7f3c0);
+  --sh-string: light-dark(#7a6a00, #fde047);
+  --sh-keyword: light-dark(#0a5a2a, #22c55e);
+  --sh-comment: light-dark(#6a8f77, #4b6b57);
+}
+
+/* Reading size. */
+:root[data-mod-size="small"] .aro-prose {
+  font-size: 13.5px;
+}
+:root[data-mod-size="large"] .aro-prose {
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+/* Composer beam: the lights that run the composer's edge while ARO replies. */
+:root[data-mod-beam="off"] .aro-beam {
+  display: none;
+}
+
+/* Rise in: a new message fades up into place. */
+@keyframes aro-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+:root[data-mod-rise="on"] [data-message] {
+  animation: aro-rise 420ms var(--nimbus-ease) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-mod-rise="on"] [data-message] {
+    animation: none;
+  }
+}
+
+/* Focus mode: everything but the latest exchange steps back. Hovering or focusing a message
+   brings it forward, so nothing is hidden, only quieted. The question stays lit beside its reply. */
+:root[data-mod-focus="on"] [data-message] {
+  transition: opacity 400ms var(--nimbus-ease);
+}
+:root[data-mod-focus="on"] [data-message][data-last="false"]:not(:hover):not(:focus-within) {
+  opacity: 0.42;
+}
+:root[data-mod-focus="on"] [data-message][data-role="user"][data-last="false"]:has(+ [data-message][data-last="true"]) {
+  opacity: 1;
+}
+
+/* Spotlight: a soft light under the pointer. The element is always mounted (ModsApplier) and
+   only follows the pointer while the mod is on. */
+.aro-spotlight {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 600ms var(--nimbus-ease);
+  background: radial-gradient(
+    460px circle at var(--spot-x, 50%) var(--spot-y, 35%),
+    color-mix(in oklab, var(--nimbus-accent) 11%, transparent),
+    transparent 70%
+  );
+}
+:root[data-mod-spotlight="on"] .aro-spotlight {
+  opacity: 1;
+}

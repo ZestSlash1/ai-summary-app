@@ -16,6 +16,23 @@ export type WorkflowMap = {
   output: { node: string };
 };
 
+/** Where the text-to-image workflow takes its inputs. Same idea as WorkflowMap, minus the input image. */
+export type CreateMap = {
+  prompt: { node: string; field: string };
+  seed: { node: string; field: string };
+  width: { node: string; field: string };
+  height: { node: string; field: string };
+  output: { node: string };
+};
+
+/** Picture shapes the create tool offers, as [width, height]. Multiples of 16, about 0.8 megapixels. */
+export const ASPECTS = {
+  square: [896, 896],
+  landscape: [1088, 768],
+  portrait: [768, 1088],
+} as const;
+export type Aspect = keyof typeof ASPECTS;
+
 export type ImageRef = { filename: string; subfolder: string; type: string };
 
 export type JobState =
@@ -45,6 +62,8 @@ export type ComfyClientOptions = {
   apiKey?: string;
   workflow: Workflow;
   map: WorkflowMap;
+  /** Text-to-image workflow. Without it, startCreate refuses. */
+  create?: { workflow: Workflow; map: CreateMap };
   /** Default working size in megapixels. */
   megapixels?: number;
 };
@@ -131,7 +150,31 @@ export function createComfyClient(opts: ComfyClientOptions) {
     const seed = input.seed ?? Math.floor(Math.random() * 2 ** 31);
     const megapixels = clamp(input.megapixels ?? opts.megapixels ?? 0.5, 0.25, 1.0);
     const prompt = patchWorkflow(uploadedName, instruction, seed, megapixels);
+    return queuePrompt(prompt, 'edit');
+  }
 
+  /** Make a picture from text alone, with the create workflow. */
+  async function startCreate(input: { prompt: string; aspect?: Aspect; seed?: number }): Promise<{ jobId: string }> {
+    if (!opts.create) throw new ComfyError('unavailable', 'Image creation is not set up on the image server.');
+    const text = input.prompt.trim();
+    if (!text) throw new ComfyError('rejected', 'The image description is empty.');
+    const [width, height] = ASPECTS[input.aspect && input.aspect in ASPECTS ? input.aspect : 'square'];
+    const { workflow, map } = opts.create;
+    const wf = structuredClone(workflow);
+    const set = (target: { node: string; field: string }, value: unknown) => {
+      const node = wf[target.node];
+      if (!node) throw new ComfyError('rejected', `Workflow is missing node ${target.node}.`);
+      node.inputs[target.field] = value;
+    };
+    set(map.prompt, text);
+    set(map.seed, input.seed ?? Math.floor(Math.random() * 2 ** 31));
+    set(map.width, width);
+    set(map.height, height);
+    return queuePrompt(wf, 'creation');
+  }
+
+  /** Send a ready workflow to ComfyUI and map every refusal to a message safe to show. */
+  async function queuePrompt(prompt: Workflow, what: 'edit' | 'creation'): Promise<{ jobId: string }> {
     // The gateway may hold this request while Bonsai releases the GPU, so allow it time.
     const res = await req(
       '/prompt',
@@ -146,7 +189,7 @@ export function createComfyClient(opts: ComfyClientOptions) {
     if (res.status === 503) {
       const type = body?.error?.type;
       if (type === 'gpu_busy') throw new ComfyError('busy', 'The GPU is busy right now. Try again in a moment.');
-      throw new ComfyError('unavailable', 'The GPU is not ready for image editing yet. Try again shortly.');
+      throw new ComfyError('unavailable', `The GPU is not ready for image ${what === 'edit' ? 'editing' : 'creation'} yet. Try again shortly.`);
     }
     if (res.status === 401 || res.status === 403) {
       throw new ComfyError('unavailable', 'The image server rejected this app\'s credentials.');
@@ -154,7 +197,9 @@ export function createComfyClient(opts: ComfyClientOptions) {
     if (res.status === 400) {
       throw new ComfyError('rejected', body?.error?.message ?? 'The image server rejected the workflow.');
     }
-    if (!res.ok || !body?.prompt_id) throw new ComfyError('unavailable', 'The image server could not start the edit.');
+    if (!res.ok || !body?.prompt_id) {
+      throw new ComfyError('unavailable', `The image server could not start the ${what === 'edit' ? 'edit' : 'image'}.`);
+    }
     return { jobId: String(body.prompt_id) };
   }
 
@@ -166,7 +211,9 @@ export function createComfyClient(opts: ComfyClientOptions) {
       const detail = (fail?.[1] as Json | undefined)?.exception_message;
       return { status: 'error', message: typeof detail === 'string' ? detail.split('\n')[0].slice(0, 300) : 'The edit failed.' };
     }
-    const img = entry?.outputs?.[opts.map.output.node]?.images?.[0];
+    // A job came from the edit or the create workflow, whose save nodes have different ids.
+    const outputNodes = [opts.map.output.node, ...(opts.create ? [opts.create.map.output.node] : [])];
+    const img = outputNodes.map((node) => entry?.outputs?.[node]?.images?.[0]).find(Boolean);
     if (statusStr === 'success' && img && SAFE_FILE.test(img.filename ?? '')) {
       const subfolder = img.subfolder ?? '';
       if (subfolder && !SAFE_SUBFOLDER.test(subfolder)) return { status: 'error', message: 'Unexpected output location.' };
@@ -206,5 +253,5 @@ export function createComfyClient(opts: ComfyClientOptions) {
     return { body: res.body, contentType: res.headers.get('content-type') ?? 'image/png' };
   }
 
-  return { startEdit, getJob, fetchImage };
+  return { startEdit, startCreate, getJob, fetchImage };
 }

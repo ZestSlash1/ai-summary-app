@@ -168,3 +168,69 @@ test('extractLatestImage takes the newest image from the latest user message onl
   assert.equal(extractLatestImage([]), null);
   assert.equal(extractLatestImage([{ role: 'user', parts: [{ type: 'file', url, mediaType: 'application/pdf' }] }]), null);
 });
+
+// ---- text-to-image
+
+const createWorkflow = JSON.parse(fs.readFileSync(new URL('../../lib/comfy/qwen_create.api.json', import.meta.url), 'utf8'));
+const createMap = JSON.parse(fs.readFileSync(new URL('../../lib/comfy/qwen_create.map.json', import.meta.url), 'utf8'));
+
+test('every node the create map points at exists in the create workflow', () => {
+  for (const key of ['prompt', 'seed', 'width', 'height']) {
+    const t = createMap[key];
+    assert.ok(createWorkflow[t.node], `${key} -> node ${t.node}`);
+    assert.ok(t.field in createWorkflow[t.node].inputs, `${key} -> ${t.node}.${t.field}`);
+  }
+  assert.equal(createWorkflow[createMap.output.node].class_type, 'SaveImage');
+});
+
+test('startCreate patches the prompt, seed and shape, and leaves the stored workflow alone', async () => {
+  const sent = [];
+  const srv = http.createServer((req, res) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      res.setHeader('content-type', 'application/json');
+      if (req.url === '/prompt') {
+        sent.push(JSON.parse(Buffer.concat(chunks).toString()).prompt);
+        return res.end(JSON.stringify({ prompt_id: 'abcdef123456' }));
+      }
+      res.end('{}');
+    });
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const client = createComfyClient({
+    baseUrl: `http://127.0.0.1:${srv.address().port}`,
+    workflow,
+    map,
+    create: { workflow: createWorkflow, map: createMap },
+  });
+  const { jobId } = await client.startCreate({ prompt: '  a red fox in snow ', aspect: 'landscape', seed: 7 });
+  assert.equal(jobId, 'abcdef123456');
+  const wf = sent[0];
+  assert.equal(wf[createMap.prompt.node].inputs.text, 'a red fox in snow');
+  assert.equal(wf[createMap.seed.node].inputs.seed, 7);
+  assert.deepEqual([wf[createMap.width.node].inputs.width, wf[createMap.height.node].inputs.height], [1088, 768]);
+  assert.notEqual(createWorkflow[createMap.prompt.node].inputs.text, 'a red fox in snow');
+
+  await client.startCreate({ prompt: 'x y z', aspect: 'nonsense' });
+  assert.deepEqual([sent[1][createMap.width.node].inputs.width, sent[1][createMap.height.node].inputs.height], [896, 896]);
+  await assert.rejects(client.startCreate({ prompt: '   ' }), (e) => e instanceof ComfyError && e.code === 'rejected');
+  srv.close();
+});
+
+test('startCreate refuses when the client has no create workflow, and a created job reads back from its own save node', async () => {
+  const srv = http.createServer((req, res) => {
+    res.setHeader('content-type', 'application/json');
+    if (req.url === '/history/abcdef123456') {
+      return res.end(JSON.stringify({ abcdef123456: { status: { status_str: 'success' }, outputs: { [createMap.output.node]: { images: [{ filename: 'aro_create_00001_.png', subfolder: '', type: 'output' }] } } } }));
+    }
+    res.end('{}');
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const bare = createComfyClient({ baseUrl: base, workflow, map });
+  await assert.rejects(bare.startCreate({ prompt: 'a cat' }), (e) => e instanceof ComfyError && e.code === 'unavailable');
+  const full = createComfyClient({ baseUrl: base, workflow, map, create: { workflow: createWorkflow, map: createMap } });
+  assert.deepEqual(await full.getJob('abcdef123456'), { status: 'done', image: { filename: 'aro_create_00001_.png', subfolder: '', type: 'output' } });
+  srv.close();
+});

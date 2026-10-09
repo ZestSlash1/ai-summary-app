@@ -7,6 +7,7 @@ import { ArrowLeft, Check, Trash2, X } from "lucide-react";
 import { gsap, useGSAP, reducedMotion } from "@/lib/motion";
 import { ModelSwitcher } from "@/components/ModelSwitcher";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ModsPanel } from "@/components/ModsPanel";
 import { GpuStatusPanel } from "@/components/GpuStatus";
 import { McpConnectorsList } from "@/components/McpConnectorsList";
 import { BrandTile, GithubMark } from "@/components/BrandMark";
@@ -19,6 +20,7 @@ import { BUILTIN_SKILLS, type Skill } from "@/lib/skills";
 const SECTIONS = [
   { id: "account", label: "Account" },
   { id: "appearance", label: "Appearance" },
+  { id: "mods", label: "Mods" },
   { id: "models", label: "Models" },
   { id: "home-pc", label: "Home PC" },
   { id: "connectors", label: "Connectors" },
@@ -190,6 +192,12 @@ export default function SettingsPage() {
 
           <Section id="appearance" title="Appearance" description="Dark is the default. System follows your device.">
             <ThemeToggle />
+          </Section>
+
+          <Section id="mods" title="Mods" description="Visual touches for the chat: lighting, motion, reading, and color. Saved on this device.">
+            <Card>
+              <ModsPanel />
+            </Card>
           </Section>
 
           <Section

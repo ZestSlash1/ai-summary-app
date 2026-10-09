@@ -1,0 +1,8 @@
+{
+  "note": "Node ids inside qwen_create.api.json that lib/comfy.ts patches per request. Qwen-Image 2512 (Q3_K_M GGUF) with its 4-step Lightning LoRA, so it shares the text encoder and VAE with the edit workflow. Sizes are multiples of 16 near 0.8 megapixels to keep a render in the same range as an edit on the RTX 3060.",
+  "prompt": { "node": "6", "field": "text" },
+  "seed": { "node": "9", "field": "seed" },
+  "width": { "node": "8", "field": "width" },
+  "height": { "node": "8", "field": "height" },
+  "output": { "node": "11" }
+}

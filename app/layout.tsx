@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/Providers";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
+import { MODS_INIT_SCRIPT } from "@/lib/mods";
 import "./globals.css";
 
 // Two weights only, 400 and 500: hierarchy comes from size, color, and space.
@@ -50,6 +51,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         {/* Sets the saved theme before first paint, so there is no flash of the wrong one. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* Same for the saved mods (accent, code colors, focus mode), which are CSS attributes on <html>. */}
+        <script dangerouslySetInnerHTML={{ __html: MODS_INIT_SCRIPT }} />
       </head>
       <body className="flex h-full min-h-full bg-nimbus-chrome text-nimbus-text">
         <div id="nimbus-root">

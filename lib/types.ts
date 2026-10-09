@@ -20,6 +20,7 @@ export interface AgentToolToggles {
   web?: boolean;
   calculate?: boolean;
   imageEdit?: boolean;
+  imageCreate?: boolean;
 }
 
 export interface AgentOptions {
