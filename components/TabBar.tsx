@@ -88,7 +88,7 @@ export function TabBar({
         type="button"
         onClick={onOpenMenu}
         aria-label="Open menu"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-nimbus-text-muted transition-colors hover:bg-nimbus-surface-2 hover:text-nimbus-text md:hidden"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-nimbus-text-muted transition-colors hover:bg-nimbus-surface-2 hover:text-nimbus-text md:hidden"
       >
         <Menu aria-hidden className="h-4 w-4" />
       </button>
@@ -109,7 +109,7 @@ export function TabBar({
             <div
               key={tab.id}
               data-tab={tab.id}
-              className={`group/tab relative flex h-8 min-w-[112px] max-w-[210px] shrink-0 items-center overflow-hidden rounded-lg border transition-colors duration-200 ${
+              className={`group/tab relative flex h-8 max-md:h-10 min-w-[112px] max-w-[210px] shrink-0 items-center overflow-hidden rounded-lg border transition-colors duration-200 ${
                 active
                   ? "border-nimbus-border bg-nimbus-panel text-nimbus-text shadow-[var(--nimbus-inset-highlight)]"
                   : "border-transparent text-nimbus-text-muted hover:bg-nimbus-surface hover:text-nimbus-text"
@@ -138,7 +138,7 @@ export function TabBar({
                 type="button"
                 onClick={() => closeTab(tab.id)}
                 aria-label={`Close ${fresh ? "new chat" : tab.title}`}
-                className={`mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-nimbus-text-muted transition-[opacity,background-color,color] hover:bg-nimbus-surface-3 hover:text-nimbus-text focus-visible:opacity-100 ${
+                className={`mr-1 flex h-5 w-5 max-md:h-8 max-md:w-8 shrink-0 items-center justify-center rounded-md text-nimbus-text-muted transition-[opacity,background-color,color] hover:bg-nimbus-surface-3 hover:text-nimbus-text focus-visible:opacity-100 ${
                   active ? "opacity-100" : "opacity-0 group-hover/tab:opacity-100 max-md:opacity-100"
                 }`}
               >
@@ -156,7 +156,7 @@ export function TabBar({
         title="New chat"
         data-wiggle="spin"
         onPointerEnter={iconWiggle}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-nimbus-border text-nimbus-text-muted transition-[color,background-color,transform] hover:bg-nimbus-surface-2 hover:text-nimbus-text active:scale-90"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-nimbus-border text-nimbus-text-muted transition-[color,background-color,transform] hover:bg-nimbus-surface-2 hover:text-nimbus-text active:scale-90 max-md:h-10 max-md:w-10"
       >
         <Plus aria-hidden className="h-4 w-4" />
       </button>

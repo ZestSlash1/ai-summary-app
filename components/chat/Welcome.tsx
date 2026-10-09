@@ -114,10 +114,10 @@ export function WelcomeBanner({
       type="button"
       data-welcome="banner"
       onClick={content.onClick}
-      className="aro-glass group/banner relative mx-auto flex max-w-[calc(100%-2rem)] items-center gap-2.5 rounded-full border py-1.5 pl-3 pr-2.5 text-[12.5px] text-nimbus-text-muted transition-[border-color,scale] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-border-strong motion-safe:active:scale-[0.97]"
+      className="aro-glass group/banner relative mx-auto flex max-w-[calc(100%-2rem)] items-center gap-2.5 rounded-full border py-1.5 pl-3 pr-2.5 text-[12.5px] text-nimbus-text-muted transition-[border-color,scale] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-border-strong motion-safe:active:scale-[0.97] max-sm:rounded-2xl"
     >
       <GithubMark className="h-3.5 w-3.5 shrink-0 text-nimbus-text" />
-      <span className="truncate">
+      <span className="line-clamp-2 text-left sm:truncate">
         <span className="font-medium text-nimbus-text">{content.strong}</span> {content.rest}
       </span>
       <ArrowRight
@@ -173,13 +173,13 @@ export function WelcomeSuggestions({
   onContinue: (id: string) => void;
 }) {
   const chip =
-    "aro-glass group/chip relative flex items-center gap-2 rounded-full border px-3.5 py-2 text-[13px] text-nimbus-text-muted transition-[border-color,color,scale] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-border-strong hover:text-nimbus-text motion-safe:active:scale-[0.97]";
+    "aro-glass group/chip relative flex items-center gap-2 rounded-full border px-3.5 py-2 text-[13px] max-sm:min-h-11 max-sm:text-[14px]text-nimbus-text-muted transition-[border-color,color,scale] duration-300 ease-[var(--nimbus-ease)] hover:border-nimbus-border-strong hover:text-nimbus-text motion-safe:active:scale-[0.97]";
   const icon =
     "h-3.5 w-3.5 shrink-0 transition-transform duration-500 ease-[var(--nimbus-ease)] group-hover/chip:-rotate-12 group-hover/chip:scale-110";
 
   return (
     <div className="flex w-full flex-col items-center gap-5 px-4">
-      <div className="flex max-w-[680px] flex-wrap justify-center gap-2">
+      <div className="flex max-w-[680px] flex-wrap justify-center gap-2 max-sm:flex-col max-sm:flex-nowrap max-sm:items-center">
         {suggestions.map((s) => (
           <button key={s.label} type="button" data-welcome="chip" onClick={() => onPick(s.prompt)} className={chip}>
             <s.icon aria-hidden className={icon} />
